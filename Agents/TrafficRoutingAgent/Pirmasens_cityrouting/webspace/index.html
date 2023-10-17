@@ -1,7 +1,7 @@
 <html>
     <head>
         <!-- ===== CUSTOMISABLE ===== -->
-        <title>Pirmasens Flood Router</title>
+        <title>Pirmasens Routing</title>
         <!-- ===== CUSTOMISABLE ===== -->
 
         <!-- JS -->
@@ -161,8 +161,8 @@
 
             // ===== CUSTOMISABLE =====
             // Enter Mapbox account name and API key here!
-			MapHandler.MAP_USER = "szp20";
-            MapHandler.MAP_API = "pk.eyJ1Ijoic3pwMjAiLCJhIjoiY2xmdDlnMWxuMGU4aTNkcGplcWhtZ2lyeCJ9.2v__IHlc2wzlgexRdxfZ8w";
+			MapHandler.MAP_USER = "";
+            MapHandler.MAP_API = "";
             // ===== CUSTOMISABLE =====
             // Create a new manager instance
             var manager = new Manager(MapProvider.MAPBOX);
@@ -260,21 +260,27 @@
                 sourceMarker.on("dragend", function(e) {
                     selectedPoint = e.target.getLngLat();
                     getVertex(selectedPoint);
+                    getPoi(selectedPoint);
                     getRoute();
                 });
 
-                // draggable marker for destination point
-                var targetMarker = new mapboxgl.Marker({
-                        draggable: true
-                    })
-                    .setLngLat([7.600235, 49.2016235])
-                    .addTo(MapHandler.MAP);
 
-                targetMarker.on("dragend", function(e) {
-                    selectedPoint = e.target.getLngLat();
-                    getVertex(selectedPoint);
-                    getRoute();
-                });
+
+                    // function to get nearest vertex to the passed point
+                    function getPoi(selectedPoint) {
+                    var url = `http://localhost:3838/geoserver/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=pirmasens:routing_ways&outputformat=application/json&viewparams=lon:${selectedPoint.lng};lat:${selectedPoint.lat};`;
+
+                    $.ajax({
+                        url: url,
+                        async: false,
+                        success: function(data) {
+                            loadVertex(
+                                data,
+                                false
+                            );
+                        }
+                    });
+                }
 
 
                 // function to get nearest vertex to the passed point
@@ -343,7 +349,7 @@
 
                 //To get initial route
                 getVertex(sourceMarker.getLngLat());
-                getVertex(targetMarker.getLngLat());
+                getPoi(sourceMarker.getLngLat());
                 getRoute();
             }
         </script>

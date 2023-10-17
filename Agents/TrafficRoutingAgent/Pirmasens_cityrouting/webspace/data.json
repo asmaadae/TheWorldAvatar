@@ -11,7 +11,7 @@
                     "cluster": false,
                     "clusterMaxZoom": 14,
                     "clusterRadius": 100,
-                    "data": "http://localhost:3838/geoserver/pirmasens/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=pirmasens%3Arouting_ways&outputFormat=application%2Fjson"
+                    "data": "http://localhost:3838/geoserver/pirmasens/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=pirmasens%3Apoints&outputFormat=application%2Fjson"
                 }
             ],
             "layers": [

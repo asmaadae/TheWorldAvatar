@@ -25,6 +25,10 @@ To prepare OSM data in `.gml` format
 3) Import the `.osm` file  into QGIS using [QuickOSM](https://plugins.qgis.org/plugins/QuickOSM/) plugin, then export points and polygons layer as `points.gml` and `polygons.gml`.
 4) Place the file in [points directory](stack-data-uploader-inputs/data/pirmasens_toilets/point/) and [polygons directory](stack-data-uploader-inputs/data/pirmasens_toilets/polygon/).
 
+### Run IsochroneAgent
+1) Run IsochroneAgent with the inputs as specified in [IsochroneAgent/Inputs](IsochroneAgent/inputs/).
+2) Change the Ontop endpoint with your stack-name in the service clause.
+3) The isochroen generated are in the intervals of 1 minutes. 
 
 ## Starting the visualisation
 ```

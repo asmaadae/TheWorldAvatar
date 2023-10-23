@@ -1,5 +1,6 @@
 CREATE TABLE poi AS
 SELECT
+  p.osm_id,
   p.amenity,
   p.operator,
   p.male,
@@ -18,6 +19,7 @@ FROM points AS p
 WHERE p.amenity = 'toilets' OR p.toilets_position IS NOT NULL OR p.toilets_handwashing IS NOT NULL
 UNION
 SELECT
+  poly.osm_id,
   poly.amenity,
   poly.operator,
   poly.male,

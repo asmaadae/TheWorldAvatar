@@ -1,0 +1,16 @@
+[PrefixDeclaration]
+xsd:    http://www.w3.org/2001/XMLSchema#
+bot:    https://w3id.org/bot#
+obe: 	https://www.theworldavatar.com/kg/ontobuiltenv/
+iso:    https://www.theworldavatar.com/kg/ontoisochrone/
+geo:    http://www.opengis.net/ont/geosparql#
+time:   http://www.w3.org/2006/time#
+ex:   https://example.org/
+
+[MappingDeclaration] @collection [[
+mappingId   pirmasens-toilet
+target		ex:{osm_id} a ex:Toilet;
+                geo:asWKT {"geometryProperty"}^^xsd:string.
+source      SELECT osm_id, amenity, operator, male, female, access, fee, wheelchair, "geometryProperty", nearest_node_id FROM poi
+
+]]

@@ -84,7 +84,7 @@ def get_heat_chemicals(data_file: str) -> pd.DataFrame:
     measure_class = get_class(measure)
     design_capacity = "http://www.theworldavatar.com/kg/ontocompany/DesignCapacity_"
     design_capacity_class = get_class(design_capacity)
-    specific_energy = "http://www.theworldavatar.com/kg/ontocompany/SpecificEnergy_"
+    specific_energy = "http://www.theworldavatar.com/kg/ontocompany/SpecificEnergyConsumption_"
     specific_energy_class = get_class(specific_energy)
 
     address = "http://ontology.eil.utoronto.ca/icontact.owl#Address_"

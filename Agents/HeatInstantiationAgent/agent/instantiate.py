@@ -2,10 +2,11 @@ import pandas as pd
 import numpy as np
 from flask import Blueprint, request, jsonify, Response
 import requests
-import agentlogging
+from py4jps import agentlogging
 import json
 import uuid
-from .kgclient import KGClient
+from kgclient import KGClient
+import os
 
 
 ROUTE = "/getHeatData"
@@ -29,7 +30,7 @@ def get_class(iri: str) -> str:
 
 
 def get_iri(base: str) -> str:
-    return "<" + base + str(uuid.uuid4) + ">"
+    return "<" + base + str(uuid.uuid4()) + ">"
 
 
 def get_string(base: str) -> str:
@@ -52,9 +53,11 @@ def instantiate_data(triples: pd.DataFrame, kgclient: KGClient) -> None:
     """
     Instantiates all triples in the specified endpoint
     """
-    update_string = "INSERT DATA {{  " + \
-        triples.to_string(index=False, header=False) + ".}} "
-    update_string = update_string.replace("\n", ". ")
+    triples["object"] = triples["object"].apply(lambda x: x + ".")
+    data_string = triples.to_string(index=False, header=False)
+    update_string = "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>" + os.linesep + \
+        "INSERT DATA {  " + os.linesep + \
+        data_string + os.linesep + "} "
     kgclient.performUpdate(update_string)
 
 
@@ -106,39 +109,42 @@ def get_heat_chemicals(data_file: str) -> pd.DataFrame:
     has_unit = "<http://www.ontology-of-units-of-measure.org/resource/om-2/hasUnit>"
 
     for ind, row in plants_data.iterrows():
-        company_name = get_string(row["Company"])
+
+        company_name = row["Company Name"]
+        company_name_str = get_string(company_name)
         year_formation = get_year(row["Year of Formation"])
         company_iri = get_iri(company)
         chemical_plant_iri = get_iri(chemical_plant)
-        chemical_plant_name = get_string("Chemical_Plant_of_" + row["Company"])
+        chemical_plant_name = get_string(
+            "Chemical_Plant_of_" + row["Company Name"])
         address_iri = get_iri(address)
         measure_iri_1 = get_iri(measure)
         measure_iri_2 = get_iri(measure)
         measure_iri_1_name = get_string(
-            "Measure_Specific_Energy_" + row["Company"])
+            "Measure_Specific_Energy_" + company_name)
         measure_iri_2_name = get_string(
-            "Measure_Design_Capacity_" + row["Company"])
+            "Measure_Design_Capacity_" + company_name)
         specific_energy_iri = get_iri(specific_energy)
         design_capacity_iri = get_iri(design_capacity)
         specific_energy_name = get_string(
-            "Specific_Energy_of_" + row["Company"])
+            "Specific_Energy_of_" + company_name)
         design_capacity_name = get_string(
-            "Design_Capacity_of_" + row["Company"])
+            "Design_Capacity_of_" + company_name)
         specific_energy_value = get_double(
             row["Specific energy consumption (MJ/kg)"])
         design_capacity_value = get_double(
             row["Production Volume (tons/year)"])
         ssic_code = get_integer(row["SSIC Code"])
         business_activity = get_string(row["Business Activity"])
-        address_name = get_string("Address_of_" + row["Company"])
+        address_name = get_string("Address_of_" + company_name)
         latitude = get_double(row["Latitude"])
         longitude = get_double(row["Longitude"])
         postal_code = get_integer(row["Postal Code"])
 
         company_data = pd.DataFrame(
-            {"subject": [company_iri, company_iri, company_iri, company_iri, company_iri, company_iri, company_iri],
+            {"subject": [company_iri, company_iri, company_iri, company_iri, company_iri, company_iri],
              "predicate": [rdf_type, rdfs_label, is_owner_of, has_year_formation, has_ssic_code, has_business_activity],
-             "object": [company_class, company_name, chemical_plant_iri, year_formation, ssic_code, business_activity]
+             "object": [company_class, company_name_str, chemical_plant_iri, year_formation, ssic_code, business_activity]
              }
         )
 
@@ -174,3 +180,12 @@ def get_heat_chemicals(data_file: str) -> pd.DataFrame:
                             specific_energy_data, design_capacity_data, address_data])
 
     return triples
+
+
+if __name__ == '__main__':
+    dirname = os.path.dirname(__file__)
+    data_file = os.path.join(dirname, '../data/heat.xlsx')
+    df = get_heat_chemicals(data_file)
+    update_endpoint = "http://localhost:8080/blazegraph/namespace/sgbusinessunits/sparql/"
+    kgclient_heat = KGClient(update_endpoint, update_endpoint)
+    instantiate_data(df, kgclient_heat)

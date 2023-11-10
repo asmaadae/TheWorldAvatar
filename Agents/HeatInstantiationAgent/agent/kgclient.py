@@ -10,8 +10,8 @@ import json
 
 from py4jps import agentlogging
 
-from agent.errorhandling.exceptions import KGException
-from agent.kgutils.javagateway import jpsBaseLibGW
+from exceptions import KGException
+from javagateway import jpsBaseLibGW
 
 # Initialise logger
 logger = agentlogging.get_logger("prod")
@@ -26,12 +26,6 @@ class KGClient:
         self.jpsBaseLib_view = jpsBaseLibGW.createModuleView()
         jpsBaseLibGW.importPackages(
             self.jpsBaseLib_view, "uk.ac.cam.cares.jps.base.query.*")
-
-        # TODO replace RemoteStoreClient with AccessAgent/StoreClient once its tested
-        # StoreRouter = jpsBaseLib_view.StoreRouter
-        # # Get StoreClientInterface Java object to sparqlEndPoint with
-        # # query operations enabled (True) and update operations disabled (False)
-        # StoreClient = StoreRouter.getStoreClient(sparqlEndPoint, True, False)
 
         try:
             if kg_user is not None:

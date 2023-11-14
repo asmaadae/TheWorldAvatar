@@ -255,5 +255,6 @@ if __name__ == '__main__':
     data_file = os.path.join(dirname, '../data/heat.xlsx')
     df = get_heat_chemicals(data_file)
     update_endpoint = "http://localhost:8080/blazegraph/namespace/sgbusinessunits/sparql/"
+    update_endpoint = "http://theworldavatar.com/blazegraph/namespace/sgbusinessunits/sparql/"
     kgclient_heat = KGClient(update_endpoint, update_endpoint)
     instantiate_data(df, kgclient_heat)

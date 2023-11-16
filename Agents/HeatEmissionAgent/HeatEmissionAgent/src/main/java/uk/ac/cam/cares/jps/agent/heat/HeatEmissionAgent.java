@@ -22,6 +22,8 @@ import uk.ac.cam.cares.jps.base.exception.JPSRuntimeException;
 import uk.ac.cam.cares.jps.base.query.AccessAgentCaller;
 import uk.ac.cam.cares.jps.base.query.RemoteStoreClient;
 import uk.ac.cam.cares.jps.base.util.CRSTransformer;
+import java.util.Map;
+import java.util.HashMap;
 
 import com.jayway.jsonpath.JsonPath;
 
@@ -72,6 +74,7 @@ public class HeatEmissionAgent extends JPSAgent {
 			JSONArray heatresult = new JSONArray();
 			JSONObject heatresult1 = new JSONObject();
 			JSONArray IRIandCO2QueryResult = IRIandCO2Query();
+			Map<String, Integer> numHeatSources = getNumberofPlantItems();
 			StringBuffer Combined = new StringBuffer("{\r\n" +
 					"\"type\": \"FeatureCollection\",\r\n" +
 					"\"features\": [\n");
@@ -81,8 +84,11 @@ public class HeatEmissionAgent extends JPSAgent {
 			for (int i = 0; i < IRIandCO2QueryResult.length(); i++) {
 				String IRI = IRIandCO2QueryResult.getJSONObject(i).getString("IRI");
 				String CO2 = IRIandCO2QueryResult.getJSONObject(i).getString("CO2");
-				String Plant_item = IRIandCO2QueryResult.getJSONObject(i).getString("plant_item");
 				String ChemPlant = IRIandCO2QueryResult.getJSONObject(i).getString("chemical_plant");
+				Double numItems = 1.0 * numHeatSources.get(ChemPlant);
+				CO2 = String.valueOf(3385749.0 / numItems);
+				String Plant_item = IRIandCO2QueryResult.getJSONObject(i).getString("plant_item");
+
 				String ChemPlantName = "<" + ChemPlant + ">";
 
 				JSONArray plantInfoQueryResult = FuelCEIEfficiency(ChemPlantName);
@@ -242,6 +248,50 @@ public class HeatEmissionAgent extends JPSAgent {
 		JSONArray IRIandCO2QueryResult = AccessAgentCaller.queryStore("jibusinessunits",
 				IRIandCO2Query.toString());
 		return IRIandCO2QueryResult;
+	}
+
+	// Query number of plant items per chemical plant
+	public static Map<String, Integer> getNumberofPlantItems() {
+		StringBuffer IRIandCO2Query = new StringBuffer(
+				"PREFIX ns2: <https://www.theworldavatar.com/kg/ontobuiltenv/>\n");
+		IRIandCO2Query.append("PREFIX geo: <http://www.opengis.net/ont/geosparql#>\n");
+		IRIandCO2Query.append("PREFIX ocp: <http://www.theworldavatar.com/kg/ontochemplant/>\n");
+		IRIandCO2Query.append("PREFIX om:  <http://www.ontology-of-units-of-measure.org/resource/om-2/>\n");
+		IRIandCO2Query.append("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n");
+		IRIandCO2Query.append("PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \n");
+		IRIandCO2Query.append("SELECT ?chemical_plant (COUNT(?plant_item) as ?num_items) WHERE { \n");
+		IRIandCO2Query.append("?chemical_plant ocp:hasFuelType ?ft. \n");
+		IRIandCO2Query.append("?chemical_plant rdfs:label ?plant_name. \n");
+		IRIandCO2Query.append("?ft rdfs:label ?ftl. \n");
+		IRIandCO2Query.append("?chemical_plant geo:ehContains ?plant_item . \n");
+		IRIandCO2Query.append("?plant_item ns2:hasOntoCityGMLRepresentation ?IRI . \n");
+		IRIandCO2Query.append("?plant_item ocp:hasIndividualCO2Emission ?x .  \n");
+		IRIandCO2Query.append("?x om:hasNumericalValue ?CO2 . \n");
+		IRIandCO2Query.append("?x om:hasUnit ?a . \n");
+		IRIandCO2Query.append("?a om:symbol ?unit . \n");
+		IRIandCO2Query.append("FILTER regex(str(?ftl),\"Natural gas liquid\").");
+		IRIandCO2Query.append("FILTER regex(str(?plant_item), \"plantitem\"). \n");
+		IRIandCO2Query.append(
+				"FILTER (str(?plant_name) not in (\"Chemical_plant_of_Sembcorp Integrated Wastewater Treatment Plant\","
+						+
+						"\"Chemical_plant_of_SembCorp EFW (Energy from Waste)\"," +
+						"\"Chemical_plant_of_SembCorp Industries Ltd\"," +
+						"\"Chemical_plant_of_SembCorp Utilities\"," +
+						"\"Chemical_plant_of_YTL PowerSeraya Pte. Limited\", " +
+						"\"Chemical_plant_of_Tuas Power Utilities\", " +
+						"\"Chemical_plant_of_Sembcorp Cogen Pte Ltd@Sakra\")) \n");
+		IRIandCO2Query.append("}");
+		IRIandCO2Query.append("GROUP BY (?chemical_plant)");
+		JSONArray IRIandCO2QueryResult = AccessAgentCaller.queryStore("jibusinessunits",
+				IRIandCO2Query.toString());
+		Map<String, Integer> numHeatSources = new HashMap<>();
+		for (int i = 0; i < IRIandCO2QueryResult.length(); i++) {
+			String plantIri = IRIandCO2QueryResult.getJSONObject(i).getString("chemical_plant");
+			Integer numItems = IRIandCO2QueryResult.getJSONObject(i).getInt("num_items");
+			numHeatSources.put(plantIri, numItems);
+		}
+
+		return numHeatSources;
 	}
 
 	// Chemical plant fuel, CEI and thermal efficiency query

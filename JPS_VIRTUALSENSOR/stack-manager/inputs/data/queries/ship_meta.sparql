@@ -35,6 +35,18 @@ UNION
        om:hasValue/om:hasNumericalValue ?massflow.
   ?id a ?idc.
   ?idc rdfs:label ?pollutant.
+  FILTER(?idc = <https://www.theworldavatar.com/kg/ontodispersion/CO2>).
+  BIND (concat(?pollutant," (kg/h)") AS ?Property).
+  BIND (ROUND(?massflow*3600*10)/10 AS ?Value).
+}
+UNION
+{[IRI] disp:emits ?emission.
+  ?emission disp:hasPollutantID ?id;
+            om:hasQuantity ?q.
+  ?q a om:MassFlow;
+       om:hasValue/om:hasNumericalValue ?massflow.
+  ?id a ?idc.
+  ?idc rdfs:label ?pollutant.
   FILTER(?idc = <https://www.theworldavatar.com/kg/ontodispersion/NOx>).
   BIND (concat(?pollutant," (g/h)") AS ?Property).
   BIND (ROUND(?massflow*3600000*10)/10 AS ?Value).

@@ -3,7 +3,7 @@
         "Name": "python-service",
         "TaskTemplate": {
             "ContainerSpec": {
-                "Image": "ghcr.io/cambridge-cares/python-service:1.3",
+                "Image": "ghcr.io/cambridge-cares/python-service:1.4-virtual-sensor-emission-SNAPSHOT",
                 "Env": [
                     "FILE_SERVER=http://ship-stack-file-server:8080/FileServer/"
                 ],

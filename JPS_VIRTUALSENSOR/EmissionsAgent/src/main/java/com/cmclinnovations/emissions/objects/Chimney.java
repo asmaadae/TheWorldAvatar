@@ -22,6 +22,7 @@ public class Chimney {
     private double flowrateSO2;
     private double flowrateHC;
     private double flowrateCO;
+    private double flowrateCO2;
     private double pm25; // pm 2.5
     private double pm10; // pm 10
 
@@ -86,6 +87,8 @@ public class Chimney {
                 this.flowrateHC = pollutants[i].getFlowrate();
             } else if (pollutants[i].getSpecies().contentEquals("CO")) {
                 this.flowrateCO = pollutants[i].getFlowrate();
+            } else if (pollutants[i].getSpecies().contentEquals("CO2")) {
+                this.flowrateCO2 = pollutants[i].getFlowrate();
             } else if (pollutants[i].getSpecies().contentEquals("SO2")) {
                 this.flowrateSO2 = pollutants[i].getFlowrate();
             }
@@ -111,6 +114,10 @@ public class Chimney {
 
     public double getFlowrateCO() {
         return this.flowrateCO;
+    }
+
+    public double getFlowrateCO2() {
+        return this.flowrateCO2;
     }
 
     public double getFlowrateSO2() {

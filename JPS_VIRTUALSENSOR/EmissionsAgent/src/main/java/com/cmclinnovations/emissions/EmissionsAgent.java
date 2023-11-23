@@ -110,6 +110,8 @@ public class EmissionsAgent extends DerivationAgent {
                 QueryClient.EMISSION);
         String coEmission = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.EMISSION);
+        String co2Emission = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
+                QueryClient.EMISSION);
         String so2Emission = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.EMISSION);
         String pm10Emission = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
@@ -120,6 +122,7 @@ public class EmissionsAgent extends DerivationAgent {
         String noxId = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.NO_X);
         String uhcId = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.UHC);
         String coId = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.CO);
+        String co2Id = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.CO2);
         String so2Id = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.SO2);
         String pm10Id = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.PM10);
         String pm25Id = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.PM25);
@@ -127,6 +130,7 @@ public class EmissionsAgent extends DerivationAgent {
         derivationOutputs.addTriple(noxEmission, QueryClient.HAS_POLLUTANT_ID, noxId);
         derivationOutputs.addTriple(uhcEmission, QueryClient.HAS_POLLUTANT_ID, uhcId);
         derivationOutputs.addTriple(coEmission, QueryClient.HAS_POLLUTANT_ID, coId);
+        derivationOutputs.addTriple(co2Emission, QueryClient.HAS_POLLUTANT_ID, co2Id);
         derivationOutputs.addTriple(so2Emission, QueryClient.HAS_POLLUTANT_ID, so2Id);
         derivationOutputs.addTriple(pm10Emission, QueryClient.HAS_POLLUTANT_ID, pm10Id);
         derivationOutputs.addTriple(pm25Emission, QueryClient.HAS_POLLUTANT_ID, pm25Id);
@@ -163,6 +167,7 @@ public class EmissionsAgent extends DerivationAgent {
         String uhcFlow = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.MASS_FLOW);
         String coFlow = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.MASS_FLOW);
+        String co2Flow = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX, QueryClient.MASS_FLOW);
         String so2Flow = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.MASS_FLOW);
         String pm10Flow = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
@@ -176,6 +181,8 @@ public class EmissionsAgent extends DerivationAgent {
         String uhcMeasure = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.MEASURE_STRING);
         String coMeasure = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
+                QueryClient.MEASURE_STRING);
+        String co2Measure = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.MEASURE_STRING);
         String so2Measure = derivationOutputs.createNewEntityWithBaseUrl(QueryClient.PREFIX,
                 QueryClient.MEASURE_STRING);
@@ -214,6 +221,16 @@ public class EmissionsAgent extends DerivationAgent {
         derivationOutputs.addLiteral(coMeasure, hasNumericalValue,
                 chimney.getFlowrateCO());
         derivationOutputs.addTriple(coMeasure, hasUnit, kgs);
+
+        // co2
+        derivationOutputs.addTriple(shipIri, QueryClient.EMITS, co2Emission);
+        derivationOutputs.addTriple(co2Emission, hasQuantity, density);
+        derivationOutputs.addTriple(co2Emission, hasQuantity, temperature);
+        derivationOutputs.addTriple(co2Emission, hasQuantity, co2Flow);
+        derivationOutputs.addTriple(co2Flow, hasValue, co2Measure);
+        derivationOutputs.addLiteral(co2Measure, hasNumericalValue,
+                chimney.getFlowrateCO2());
+        derivationOutputs.addTriple(co2Measure, hasUnit, kgs);
 
         // so2
         derivationOutputs.addTriple(shipIri, QueryClient.EMITS, so2Emission);

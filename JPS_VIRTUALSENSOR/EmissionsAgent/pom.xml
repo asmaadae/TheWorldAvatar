@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.cmclinnovations</groupId>
     <artifactId>EmissionsAgent</artifactId>
-    <version>1.3-dev-aermod-vis-SNAPSHOT</version>
+    <version>1.4-virtual-sensor-emission-SNAPSHOT</version>
     <packaging>war</packaging>
     
     <!-- Parent POM -->

@@ -43,6 +43,7 @@ public class QueryClient {
     static final String NO_X = PREFIX + "NOx";
     static final String UHC = PREFIX + "uHC";
     static final String CO = PREFIX + "CO";
+    static final String CO2 = PREFIX + "CO2";
     static final String SO2 = PREFIX + "SO2";
     static final String PM10 = PREFIX + "PM10";
     static final String PM25 = PREFIX + "PM2.5";

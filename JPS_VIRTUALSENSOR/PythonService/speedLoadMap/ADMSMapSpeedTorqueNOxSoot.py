@@ -13,7 +13,7 @@ class ADMSMapSpeedTorqueNOxSoot(object):
     def __init__(self):
         # Default input values.
         self.NO_frac = 0.35
-        self.NumParSizeClasses = 4
+        self.NumParSizeClasses = 50
         self.LogNorm_mu = 2000.0
         # controlls the width of the distribution
         self.LogNorm_sigma = 1.0
@@ -37,6 +37,12 @@ class ADMSMapSpeedTorqueNOxSoot(object):
     @staticmethod
     def value_unit_dict(value, unit):
         return {'value': value, 'unit': unit}
+    
+    @staticmethod
+    def get_co2_ppm(speed):
+        # Transform inputs.
+        speed_transf = 2 * (speed - 800.0) / 1600.0 - 1.0
+        return -1.03869131e-3*speed_transf**2.+3.19933367*speed_transf+1.13966756e5
 
     def pollutant_dict(self, name, value, unit, pseudo, molmass, molmass_unit):
         return {'name': name, 'value': value, 'unit': unit,
@@ -60,12 +66,13 @@ class ADMSMapSpeedTorqueNOxSoot(object):
                 'viscosity': self.value_unit_dict(3.9067870880755E-5, 'Pa s'),
                 'compressibilityfactor': self.value_unit_dict(1, '-')}
 
-    def pollutants_list(self, nox):
+    def pollutants_list(self, nox,co2):
         nox_mfr = nox * 1e-6 * 0.05  # ppmv to kg/s, with rough guesses of density and mass flow rate
         no_mfr = nox_mfr * self.NO_frac
         no2_mfr = nox_mfr * (1.0 - self.NO_frac)
+        co2_mfr = co2 * 1e-6 * 0.05 # ppmv to kg/s, with rough guesses of density and mass flow rate
         return [self.pollutant_dict('CO', 4.38018592976711E-4, 'kg/s', 'no', 2.80104E-2, 'kg/mol'),
-                self.pollutant_dict('CO2', 1.48566682568053E-2, 'kg/s', 'no', 4.40098E-2, 'kg/mol'),
+                self.pollutant_dict('CO2', co2_mfr, 'kg/s', 'no', 4.40098E-2, 'kg/mol'),
                 self.pollutant_dict('HC', 1.23609160023103E-3, 'kg/s', 'yes', 4.58822245497081E-2, 'kg/mol'),
                 self.pollutant_dict('NO', no_mfr, 'kg/s', 'no', 3.0006E-2, 'kg/mol'),
                 self.pollutant_dict('NO2', no2_mfr, 'kg/s', 'no', 4.6006E-2, 'kg/mol'),
@@ -78,16 +85,16 @@ class ADMSMapSpeedTorqueNOxSoot(object):
         prev_cdf = 0.0
         for i in range(1, self.NumParSizeClasses + 1):
             # 1e4 ... / 4
-            the_size = exp(log(1e4) * i / 4)
+            the_size = exp(log(1e4) * i / self.NumParSizeClasses)
             cdf = self.log_normal_cdf(the_size, self.LogNorm_mu, self.LogNorm_sigma)
             the_mfr = soot * (cdf - prev_cdf) / 1000.0 / 3600.0  # g/h to kg/s
             the_list.append(self.par_size_class_dict(the_size, 'nm', 1800, 'kg/m3', the_mfr, 'kg/s'))
             prev_cdf = cdf
         return the_list
 
-    def adms_dict(self, nox, soot):
+    def adms_dict(self, nox, soot, co2):
         return {'mixture': self.mixture_dict(),
-                'pollutants': self.pollutants_list(nox),
+                'pollutants': self.pollutants_list(nox,co2),
                 'particle': self.particle_list(soot)}
 
     # NB Need to have activated the MoDS Python_Env for this to work!
@@ -124,7 +131,8 @@ class ADMSMapSpeedTorqueNOxSoot(object):
 
     def get_adms_map(self, speed, torque):
         nox_resp, soot_resp = self.evaluate_map(speed, torque)
-        return self.adms_dict(nox_resp, soot_resp)
+        co2 = self.get_co2_ppm(speed)
+        return self.adms_dict(nox_resp, soot_resp, co2)
 
 # execute from python
 def calcEmissions(speed, torque):

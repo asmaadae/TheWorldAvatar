@@ -1,0 +1,19 @@
+{
+    "datasetDirectory": "stdict",
+    "dataSubsets": [
+        {
+            "type": "tabular",
+            "skip": false,
+            "subdirectory": "rdf",
+            "table": "ais",
+            "ogr2ogrOptions": {
+                "layerCreationOptions": {
+                    "schema": "public"
+                }
+            }
+        }
+    ],
+    "mappings": [
+        "ontop_v2.obda"
+    ]
+}

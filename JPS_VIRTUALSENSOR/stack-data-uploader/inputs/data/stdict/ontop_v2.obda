@@ -1,0 +1,14 @@
+[PrefixDeclaration]
+xsd: http://www.w3.org/2001/XMLSchema#
+disp: https://www.theworldavatar.com/kg/ontodispersion/
+rdfs: http://www.w3.org/2000/01/rdf-schema#
+rdf:  http://www.w3.org/1999/02/22-rdf-syntax-ns#
+om:   http://www.ontology-of-units-of-measure.org/resource/om-2/
+
+[MappingDeclaration] @collection [[
+mappingId       AIS-CODE
+target      disp:{uuid} a disp:stc ; rdfs:label {name}; om:hasNumericalValue {code}^^xsd:integer.
+source          SELECT 'stc' || field_1::text as uuid, field_1 as code, field_2 as name
+                FROM ais
+
+]]

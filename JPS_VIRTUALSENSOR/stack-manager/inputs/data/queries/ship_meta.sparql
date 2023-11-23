@@ -1,6 +1,6 @@
 PREFIX disp: <https://www.theworldavatar.com/kg/ontodispersion/>
 PREFIX om: <http://www.ontology-of-units-of-measure.org/resource/om-2/>
-
+prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT ?Property ?Value
 WHERE {
@@ -9,5 +9,58 @@ WHERE {
 om:hasValue/om:hasNumericalValue ?mmsiValue.
  BIND (?mmsiValue AS ?Value).
  BIND ("MMSI" AS ?Property).
+}
+UNION
+{[IRI] disp:hasProperty ?st.
+?st a disp:ShipType;
+om:hasValue/om:hasNumericalValue ?stValue.
+ BIND (?stValue AS ?Value).
+ BIND ("Ship Type Code" AS ?Property).
+}
+UNION
+{[IRI] disp:hasProperty ?st.
+?st a disp:ShipType;
+om:hasValue/om:hasNumericalValue ?stValue.
+SERVICE[ONTOP] {?stc a disp:stc;
+om:hasNumericalValue ?stValue;
+rdfs:label ?stn.}
+ BIND (?stn AS ?Value).
+ BIND ("Ship Type" AS ?Property).
+}
+UNION
+{[IRI] disp:emits ?emission.
+  ?emission disp:hasPollutantID ?id;
+            om:hasQuantity ?q.
+  ?q a om:MassFlow;
+       om:hasValue/om:hasNumericalValue ?massflow.
+  ?id a ?idc.
+  ?idc rdfs:label ?pollutant.
+  FILTER(?idc = <https://www.theworldavatar.com/kg/ontodispersion/NOx>).
+  BIND (concat(?pollutant," (g/h)") AS ?Property).
+  BIND (ROUND(?massflow*3600000*10)/10 AS ?Value).
+}
+UNION
+{[IRI] disp:emits ?emission.
+  ?emission disp:hasPollutantID ?id;
+            om:hasQuantity ?q.
+  ?q a om:MassFlow;
+       om:hasValue/om:hasNumericalValue ?massflow.
+  ?id a ?idc.
+  ?idc rdfs:label ?pollutant.
+  FILTER(?idc = <https://www.theworldavatar.com/kg/ontodispersion/PM2.5>).
+  BIND (concat(?pollutant," (g/h)") AS ?Property).
+  BIND (ROUND(?massflow*3600000*10)/10 AS ?Value).
+}
+UNION
+{[IRI] disp:emits ?emission.
+  ?emission disp:hasPollutantID ?id;
+            om:hasQuantity ?q.
+  ?q a om:MassFlow;
+       om:hasValue/om:hasNumericalValue ?massflow.
+  ?id a ?idc.
+  ?idc rdfs:label ?pollutant.
+  FILTER(?idc = <https://www.theworldavatar.com/kg/ontodispersion/PM10>).
+  BIND (concat(?pollutant," (g/h)") AS ?Property).
+  BIND (ROUND(?massflow*3600000*10)/10 AS ?Value).
 }
 }

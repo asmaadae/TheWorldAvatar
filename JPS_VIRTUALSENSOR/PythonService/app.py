@@ -5,9 +5,12 @@ import aermod.postprocess_aermod as postprocess_aermod
 import aermod.elevation as elevation
 
 app = Flask(__name__)
+
+# Register blueprints for different functionalities
 app.register_blueprint(getEmissions.getEmissions_bp)
 app.register_blueprint(postprocess_aermod.get_aermod_geojson_bp)
 app.register_blueprint(elevation.get_elevation_geojson_bp)
 
 if __name__ == "__main__":
+    # Run the Flask app
     app.run()

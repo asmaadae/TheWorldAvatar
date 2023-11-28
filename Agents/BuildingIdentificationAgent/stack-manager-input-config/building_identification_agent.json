@@ -1,0 +1,29 @@
+{
+    "ServiceSpec": {
+        "Name": "building_identification_agent",
+        "TaskTemplate": {
+            "ContainerSpec": {
+                "Image": "building_identification_agent:1.0.0",
+                "Configs": [
+                    {
+                        "ConfigName": "blazegraph"
+                    },
+                    {
+                        "ConfigName": "postgis"
+                    }
+                ],
+                "Secrets": [
+                    {
+                        "SecretName": "postgis_password"
+                    }
+                ]
+            }
+        }
+    },
+    "endpoints": {
+        "openmeteo-agent": {
+            "url": "http://localhost:8080/building_identification_agent/",
+            "externalPath": "/building_identification_agent/"
+        }
+    }
+}

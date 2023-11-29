@@ -20,11 +20,12 @@ public class BuildingIdentificationAgentTest {
     public void testAgent() {
         JSONObject request = new JSONObject();
         request.put("maxDistance", "1.0");
-        request.put("route", "http://localhost:48888/sgbusinessunits");
+        request.put("route", System.getenv("route"));
         request.put("requestUrl", "/run");
         request.put("dbUrl", System.getenv("dbUrl"));
         request.put("dbUser", System.getenv("dbUser"));
         request.put("dbPassword", System.getenv("dbPassword"));
+
         JSONObject result = new BuildingIdentificationAgent().processRequestParameters(request);
         assertTrue(result.getInt("number_factories") > 0);
         assertTrue(result.getInt("number_buildings") > 0);

@@ -20,9 +20,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.*;
 import java.sql.*;
-// import java.sql.Connection;
-// import java.sql.ResultSet;
-// import java.sql.SQLException;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -48,6 +46,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
     public static final String KEY_ROUTE = "route";
     public static final String KEY_DISTANCE = "maxDistance";
     private String ontocompanyUri, contactUri;
+    private static final String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
 
     public static final String STACK_NAME = "<STACK NAME>";
     private String stackName;
@@ -57,6 +56,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private RemoteRDBStoreClient rdbStoreClient;
     private RemoteStoreClient storeClient;
     private String defaultLabel;
+    private Map<String, String> iriToLabel = new HashMap<>();
     private static final Logger LOGGER = LogManager.getLogger(BuildingIdentificationAgent.class);
 
     // Properties of database containing buildings data.
@@ -66,6 +66,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private String dbUser = null;
     private String dbPassword = null;
     private int dbSrid;
+    private String sridName;
     private double maxDistance;
     private int numberBuildingsIdentified = 0, numberFactoriesQueried = 0;
     private static final String predicate = "http://data.ordnancesurvey.co.uk/ontology/spatialrelations/hasGmlId";
@@ -105,8 +106,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 Map<String, Integer> factoryToBuilding = linkBuildings(factoryLocations);
                 List<Integer> cityObjectIdList = new ArrayList<>(factoryToBuilding.values());
                 Map<Integer, List<Coordinate[]>> objectGeometry = getSurfaceGeometry(cityObjectIdList);
-                // writeCesiumInput(objectGeometry);
-                instantiateBuildingsTriples(route, factoryToBuilding);
+                writeCesiumInput(factoryToBuilding, objectGeometry);
+                // instantiateBuildingsTriples(route, factoryToBuilding);
 
             } else if (requestParams.getString(KEY_REQ_URL).contains(URI_DELETE)) {
                 String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
@@ -142,10 +143,11 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private void getDbSrid() {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
                 Statement stmt = conn.createStatement();) {
-            String sqlString = "SELECT srid from database_srs";
+            String sqlString = "SELECT srid,gml_srs_name from database_srs";
             ResultSet result = stmt.executeQuery(sqlString);
             if (result.next()) {
                 dbSrid = result.getInt("srid");
+                sridName = result.getString("gml_srs_name");
             } else {
                 LOGGER.warn("Could not retrieve srid from database.");
             }
@@ -175,16 +177,18 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
         WhereBuilder wb = new WhereBuilder()
                 .addPrefix("ontocompany", ontocompanyUri)
-                .addPrefix("con", contactUri);
+                .addPrefix("con", contactUri).addPrefix("rdfs", rdfs);
 
         String addressVar = "?address";
         wb.addWhere("?factory", "con:hasAddress", addressVar)
+                .addWhere("?factory", "rdfs:label", "?name")
                 .addWhere(addressVar, "ontocompany:hasLongitudeEPSG4326", "?lon").addWhere(addressVar,
                         "ontocompany:hasLatitudeEPSG4326", "?lat");
         SelectBuilder sb = new SelectBuilder()
                 .addVar("factory")
                 .addVar("lon")
                 .addVar("lat")
+                .addVar("name")
                 .addWhere(wb);
 
         JSONArray queryResult = AccessAgentCaller.queryStore(route, sb.buildString());
@@ -193,10 +197,12 @@ public class BuildingIdentificationAgent extends JPSAgent {
             String factoryIri = queryResult.getJSONObject(i).getString("factory");
             Double longitude = queryResult.getJSONObject(i).getDouble("lon");
             Double latitude = queryResult.getJSONObject(i).getDouble("lat");
+            String factoryName = queryResult.getJSONObject(i).getString("name");
             String originalSrid = "EPSG:4326";
             double[] xyOriginal = { longitude, latitude };
             double[] xyTransformed = CRSTransformer.transform(originalSrid, "EPSG:" + dbSrid, xyOriginal);
             factoryLocations.put(factoryIri, xyTransformed);
+            iriToLabel.put(factoryIri, factoryName);
         }
 
         numberFactoriesQueried = factoryLocations.size();
@@ -318,6 +324,69 @@ public class BuildingIdentificationAgent extends JPSAgent {
         }
 
         return objectGeometry;
+
+    }
+
+    private void writeCesiumInput(Map<String, Integer> factoryToBuilding,
+            Map<Integer, List<Coordinate[]>> objectGeometry) {
+
+        JSONObject result = new JSONObject();
+        result.put("type", "FeatureCollection");
+        result.put("name", "data");
+
+        JSONObject crsProperties = new JSONObject();
+        crsProperties.put("properties", new JSONObject().put("name", sridName));
+        crsProperties.put("type", "name");
+        result.put("crs", crsProperties);
+
+        JSONArray featureArray = new JSONArray();
+
+        for (String factoryIri : factoryToBuilding.keySet()) {
+            int cityObjectId = factoryToBuilding.get(factoryIri);
+            List<Coordinate[]> polygons = objectGeometry.get(cityObjectId);
+            String factoryName = iriToLabel.get(factoryIri);
+
+            JSONObject featureObject = new JSONObject();
+            featureObject.put("type", "feature");
+            JSONObject propertiesObject = new JSONObject();
+            propertiesObject.put("name", factoryName);
+            propertiesObject.put("description", "Building of " + factoryName);
+            // hard-coded for now
+            propertiesObject.put("color", "rgb(2,243,6)");
+            featureObject.put("properties", propertiesObject);
+            // Geometry
+            JSONObject geometryObject = new JSONObject();
+            geometryObject.put("type", "Multipolygon");
+
+            JSONArray geomArray = new JSONArray();
+            polygons.stream().forEach(polygon -> {
+                // Array of arrays
+                JSONArray polyArray = new JSONArray();
+                Arrays.stream(polygon)
+                        .forEach(coord -> polyArray.put(new JSONArray(new double[] { coord.x, coord.y, coord.z })));
+                geomArray.put(polygons);
+            });
+            geometryObject.put("coordinates", geomArray);
+            featureObject.put("geometry", geometryObject);
+            featureArray.put(featureObject);
+        }
+
+        result.put("features", featureArray);
+
+        // Output heat emission data in GeoJSON format for DUCT
+
+        String outputFP = Paths.get(System.getProperty("user.dir"), "output", "data.geojson").toString();
+        String resultString = result.toString();
+        File file1 = new File(outputFP);
+        FileWriter fw;
+        try {
+            fw = new FileWriter(file1);
+            PrintWriter pw = new PrintWriter(fw);
+            pw.println(resultString);
+            pw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
     }
 

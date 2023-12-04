@@ -228,10 +228,10 @@ public class BuildingIdentificationAgent extends JPSAgent {
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
                 Statement stmt = conn.createStatement();) {
 
-            for (String key : factoryToBuilding.keySet()) {
+            for (String key : factoryLocations.keySet()) {
 
                 double[] coords = factoryLocations.get(key);
-                String sqlString = String.format("select id, ST_AsText(envelope) as wkt from cityobject" +
+                String sqlString = String.format("select id, public.ST_AsText(envelope) as wkt from citydb.cityobject" +
                         System.lineSeparator() +
                         "where public.ST_Intersects(public.ST_Point(%f,%f, %d),envelope)" +
                         System.lineSeparator() +
@@ -299,23 +299,17 @@ public class BuildingIdentificationAgent extends JPSAgent {
             ResultSet result = stmt.executeQuery(query);
 
             while (result.next()) {
-                Integer cityObjectId = result.getInt("cityobject_id");
+                Integer cityObjId = result.getInt("cityobject_id");
                 String wktLiteral = result.getString("wkt");
                 Geometry buildingPolygon = WKTReader.extract(wktLiteral).getGeometry();
                 Coordinate[] polyCoords = buildingPolygon.getCoordinates();
 
-                List<List<Double>> polygonCoords = Arrays.stream(polyCoords)
-                        .map(coord -> Arrays.asList(coord.x, coord.y, coord.z))
-                        .collect(Collectors.toList());
-
-                new JSONArray(polyCoords[0]);
-
-                if (objectGeometry.containsKey(cityObjectId)) {
-                    objectGeometry.get(cityObjectId).add(polyCoords);
+                if (objectGeometry.containsKey(cityObjId)) {
+                    objectGeometry.get(cityObjId).add(polyCoords);
                 } else {
                     List<Coordinate[]> buildingSurfaces = new ArrayList<>();
                     buildingSurfaces.add(polyCoords);
-                    objectGeometry.put(cityObjectId, buildingSurfaces);
+                    objectGeometry.put(cityObjId, buildingSurfaces);
                 }
             }
 
@@ -364,7 +358,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 JSONArray polyArray = new JSONArray();
                 Arrays.stream(polygon)
                         .forEach(coord -> polyArray.put(new JSONArray(new double[] { coord.x, coord.y, coord.z })));
-                geomArray.put(polygons);
+                geomArray.put(polyArray);
             });
             geometryObject.put("coordinates", geomArray);
             featureObject.put("geometry", geometryObject);

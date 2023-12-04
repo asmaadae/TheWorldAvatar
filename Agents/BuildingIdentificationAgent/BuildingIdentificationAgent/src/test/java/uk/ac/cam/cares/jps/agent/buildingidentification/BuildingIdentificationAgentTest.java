@@ -19,7 +19,7 @@ public class BuildingIdentificationAgentTest {
     @Test
     public void testAgent() {
         JSONObject request = new JSONObject();
-        request.put("maxDistance", "1.0");
+        request.put("maxDistance", "100.0");
         request.put("route", System.getenv("route"));
         request.put("requestUrl", "/run");
         request.put("dbUrl", System.getenv("dbUrl"));

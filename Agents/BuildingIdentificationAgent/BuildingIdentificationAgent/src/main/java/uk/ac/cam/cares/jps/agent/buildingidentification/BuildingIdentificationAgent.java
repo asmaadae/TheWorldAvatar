@@ -47,15 +47,18 @@ public class BuildingIdentificationAgent extends JPSAgent {
     public static final String KEY_DISTANCE = "maxDistance";
     private String ontocompanyUri, contactUri;
     private static final String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
+    private static final String rdf = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#>";
+    private static final String rdfType = rdf + "type";
 
     public static final String STACK_NAME = "<STACK NAME>";
     private String stackName;
     private String stackAccessAgentBase;
-    // EndpointConfig endpointConfig = new EndpointConfig();
+    EndpointConfig endpointConfig = new EndpointConfig();
 
     private RemoteRDBStoreClient rdbStoreClient;
     private RemoteStoreClient storeClient;
     private String defaultLabel;
+    private Map<String, Double> factoryBuildingHeights = new HashMap<>();
     private Map<String, String> iriToLabel = new HashMap<>();
     private static final Logger LOGGER = LogManager.getLogger(BuildingIdentificationAgent.class);
 
@@ -69,8 +72,13 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private String sridName;
     private double maxDistance;
     private int numberBuildingsIdentified = 0, numberFactoriesQueried = 0;
-    private static final String predicate = "http://data.ordnancesurvey.co.uk/ontology/spatialrelations/hasGmlId";
-    private static final String cityObjectId = "http://www.theworldavatar.com/kg/ontocitygml/cityObjectId";
+    // private static final String predicate =
+    // "http://data.ordnancesurvey.co.uk/ontology/spatialrelations/hasGmlId";
+    // private static final String cityObjectId =
+    // "http://www.theworldavatar.com/kg/ontocitygml/cityObjectId";
+    private static final String contains = "http://www.opengis.net/ont/geosparql#ehContains";
+    private static final String building = "http://www.theworldavatar.com/kg/ontocompany/Building_";
+    private static final String buildingType = "http://www.purl.org/oema/infrastructure/Building";
 
     public BuildingIdentificationAgent() {
         readConfig();
@@ -96,18 +104,25 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
                         : stackAccessAgentBase + defaultLabel;
                 setStoreClient(route);
-                dbUrl = requestParams.getString("dbUrl");
-                dbUser = requestParams.getString("dbUser");
-                dbPassword = requestParams.getString("dbPassword");
+                if (requestParams.has("dbUrl")) {
+                    dbUrl = requestParams.getString("dbUrl");
+                    dbUser = requestParams.getString("dbUser");
+                    dbPassword = requestParams.getString("dbPassword");
+                } else {
+                    dbUrl = endpointConfig.getDbUrl("postgres");
+                    dbUser = endpointConfig.getDbUser();
+                    dbPassword = endpointConfig.getDbPassword();
+                }
                 rdbStoreClient = new RemoteRDBStoreClient(dbUrl, dbUser, dbPassword);
                 getDbSrid();
                 maxDistance = Double.parseDouble(requestParams.getString(KEY_DISTANCE));
                 Map<String, double[]> factoryLocations = getFactoryLocations(route);
-                Map<String, Integer> factoryToBuilding = linkBuildings(factoryLocations);
-                List<Integer> cityObjectIdList = new ArrayList<>(factoryToBuilding.values());
-                Map<Integer, List<Coordinate[]>> objectGeometry = getSurfaceGeometry(cityObjectIdList);
-                writeCesiumInput(factoryToBuilding, objectGeometry);
-                // instantiateBuildingsTriples(route, factoryToBuilding);
+                Map<String, Geometry> factoryToBuilding = linkBuildings(factoryLocations);
+                // List<Integer> cityObjectIdList = new ArrayList<>(factoryToBuilding.values());
+                // Map<Integer, List<Coordinate[]>> objectGeometry =
+                // getSurfaceGeometry(cityObjectIdList);
+                // writeCesiumInput(factoryToBuilding, objectGeometry);
+                instantiateBuildingsTriples(factoryToBuilding.keySet());
 
             } else if (requestParams.getString(KEY_REQ_URL).contains(URI_DELETE)) {
                 String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
@@ -217,13 +232,13 @@ public class BuildingIdentificationAgent extends JPSAgent {
      * @param factoryLocations HashMap whose keys are factory IRIs and values are
      *                         its coordinates
      * 
-     * @return HashMap containing factory IRIs as keys and the cityObjectIds of
+     * @return HashMap containing factory IRIs as keys and the LoD0 footprints of
      *         matched buildings as values.
      */
 
-    private Map<String, Integer> linkBuildings(Map<String, double[]> factoryLocations) {
+    private Map<String, Geometry> linkBuildings(Map<String, double[]> factoryLocations) {
 
-        Map<String, Integer> factoryToBuilding = new HashMap<>();
+        Map<String, Geometry> factoryToBuilding = new HashMap<>();
 
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
                 Statement stmt = conn.createStatement();) {
@@ -231,11 +246,12 @@ public class BuildingIdentificationAgent extends JPSAgent {
             for (String key : factoryLocations.keySet()) {
 
                 double[] coords = factoryLocations.get(key);
-                String sqlString = String.format("select id, public.ST_AsText(envelope) as wkt from citydb.cityobject" +
-                        System.lineSeparator() +
-                        "where public.ST_Intersects(public.ST_Point(%f,%f, %d),envelope)" +
-                        System.lineSeparator() +
-                        "AND objectclass_id = 26;",
+                String sqlString = String.format(
+                        "select id, measured_height public.ST_AsText(envelope) as wkt from cityobject, building" +
+                                System.lineSeparator() +
+                                "where public.ST_Intersects(public.ST_Point(%f,%f, %d),envelope)" +
+                                System.lineSeparator() +
+                                "AND objectclass_id = 26 AND cityobject.id = building.id;",
                         coords[0], coords[1], dbSrid);
 
                 ResultSet result = stmt.executeQuery(sqlString);
@@ -244,21 +260,27 @@ public class BuildingIdentificationAgent extends JPSAgent {
                         new CoordinateArraySequence(new Coordinate[] { new Coordinate(coords[0], coords[1]) }),
                         new GeometryFactory());
                 Integer finalId = null;
+                Geometry buildingFootprint = null;
+                Double height = null;
 
                 while (result.next()) {
                     Integer id = result.getInt("id");
                     String wktLiteral = result.getString("wkt");
+                    Double currentHeight = result.getDouble("height");
                     Geometry scopePolygon = WKTReader.extract(wktLiteral).getGeometry();
                     Point centre = scopePolygon.getCentroid();
                     Double currentDistance = reference.distance(centre);
                     if (currentDistance < dist) {
                         dist = currentDistance;
                         finalId = id;
+                        buildingFootprint = scopePolygon;
+                        height = currentHeight;
                     }
                 }
 
                 if (dist <= maxDistance) {
-                    factoryToBuilding.put(key, finalId);
+                    factoryToBuilding.put(key, buildingFootprint);
+                    factoryBuildingHeights.put(key, height);
                 } else {
                     LOGGER.warn("No building found for factory with IRI {} within the specified maximum distance.",
                             key);
@@ -275,12 +297,12 @@ public class BuildingIdentificationAgent extends JPSAgent {
     }
 
     /**
-     * 
+     * @deprecated
      * @param cityObjectIdList: List of cityObject Ids which are integers.
      * @return HashMap with cityobject IDs as keys and a list of polygons
      *         (represented as Coordinate[]) as values.
      */
-
+    @Deprecated
     private Map<Integer, List<Coordinate[]>> getSurfaceGeometry(List<Integer> cityObjectIdList) {
 
         String sql = "select id, cityobject_id, public.ST_AsText(geometry) as wkt from surface_geometry "
@@ -336,8 +358,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
         JSONArray featureArray = new JSONArray();
 
         for (String factoryIri : factoryToBuilding.keySet()) {
-            int cityObjectId = factoryToBuilding.get(factoryIri);
-            List<Coordinate[]> polygons = objectGeometry.get(cityObjectId);
+            int cityObjId = factoryToBuilding.get(factoryIri);
+            List<Coordinate[]> polygons = objectGeometry.get(cityObjId);
             String factoryName = iriToLabel.get(factoryIri);
 
             JSONObject featureObject = new JSONObject();
@@ -350,7 +372,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
             featureObject.put("properties", propertiesObject);
             // Geometry
             JSONObject geometryObject = new JSONObject();
-            geometryObject.put("type", "Multipolygon");
+            geometryObject.put("type", "MultiPolygon");
 
             JSONArray geomArray = new JSONArray();
             polygons.stream().forEach(polygon -> {
@@ -360,7 +382,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
                         .forEach(coord -> polyArray.put(new JSONArray(new double[] { coord.x, coord.y, coord.z })));
                 geomArray.put(polyArray);
             });
-            geometryObject.put("coordinates", geomArray);
+            geometryObject.put("coordinates", new JSONArray().put(geomArray));
             featureObject.put("geometry", geometryObject);
             featureArray.put(featureObject);
         }
@@ -393,16 +415,57 @@ public class BuildingIdentificationAgent extends JPSAgent {
      * @param route
      */
 
-    private void instantiateBuildingsTriples(String route, Map<String, Integer> factoryToBuildings) {
+    private void instantiateBuildingsTriples(Set<String> factoryIriList) {
         UpdateBuilder ub = new UpdateBuilder();
 
-        for (String key : factoryToBuildings.keySet()) {
-            Integer objectId = factoryToBuildings.get(key);
-            ub.addInsert(key, cityObjectId, objectId);
+        for (String key : factoryIriList) {
+            String identifier = UUID.randomUUID().toString();
+            String buildingIri = building + identifier;
+            ub.addInsert(key, contains, buildingIri);
+            ub.addInsert(buildingIri, rdfType, buildingType);
         }
 
-        AccessAgentCaller.updateStore(route, ub.toString());
+        // AccessAgentCaller.updateStore(route, ub.toString());
+        storeClient.executeUpdate(ub.toString());
 
+    }
+
+    /*
+     * Creates POSTGIS table and GeoServer layer with the LoD0 building footprints.
+     */
+
+    private void createMapboxData(Map<String, Geometry> factoryToBuilding) {
+
+        JSONObject featureCollection = new JSONObject();
+        featureCollection.put("type", "FeatureCollection");
+        JSONArray features = new JSONArray();
+
+        for (String key : factoryToBuilding.keySet()) {
+            Geometry footPrint = factoryToBuilding.get(key);
+            JSONObject geometry = new JSONObject();
+            geometry.put("type", "Polygon");
+            JSONArray geomArray = new JSONArray();
+            Arrays.stream(footPrint.getCoordinates()).forEach(coord -> {
+                double[] xyOriginal = { coord.x, coord.y };
+                double[] xyTransformed = CRSTransformer.transform("EPSG:" + dbSrid, "EPSG:4326", xyOriginal);
+                geomArray.put(new JSONArray(xyTransformed));
+            }
+
+            );
+
+            geometry.put("coordinates", geomArray);
+            JSONObject feature = new JSONObject();
+            feature.put("type", "Feature");
+            feature.put("geometry", geometry);
+            JSONObject properties = new JSONObject();
+            properties.put("iri", key);
+            properties.put("time", simulationTime);
+            properties.put("derivation", derivationIri);
+            properties.put("height", factoryBuildingHeights.get(key));
+
+        }
+
+        return;
     }
 
     /**
@@ -413,7 +476,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
      */
     private void deleteBuildingsTriples(String route) {
         UpdateBuilder db = new UpdateBuilder()
-                .addWhere("?s", predicate, "?o");
+                .addWhere("?s", contains, "?o").addWhere("?o", rdfType, buildingType);
 
         db.addDeleteQuads(db.buildDeleteWhere().getQuads());
         AccessAgentCaller.updateStore(route, db.buildRequest().toString());
@@ -424,18 +487,11 @@ public class BuildingIdentificationAgent extends JPSAgent {
      * 
      * @param route access agent route
      */
-    private void setStoreClient(String route) {
-        JSONObject queryResult = AccessAgentCaller.getEndpoints(route);
-
-        String queryEndpoint = queryResult.getString(JPSConstants.QUERY_ENDPOINT);
-        String updateEndpoint = queryResult.getString(JPSConstants.UPDATE_ENDPOINT);
-
-        if (!isDockerized()) {
-            queryEndpoint = queryEndpoint.replace("host.docker.internal", "localhost");
-            updateEndpoint = updateEndpoint.replace("host.docker.internal", "localhost");
-        }
-
-        storeClient = new RemoteStoreClient(queryEndpoint, updateEndpoint);
+    private void setStoreClient(String queryEndpoint) {
+        if (isDockerized())
+            storeClient = new RemoteStoreClient(endpointConfig.getKgurl(), endpointConfig.getKgurl());
+        else
+            storeClient = new RemoteStoreClient(queryEndpoint, queryEndpoint);
     }
 
     /**

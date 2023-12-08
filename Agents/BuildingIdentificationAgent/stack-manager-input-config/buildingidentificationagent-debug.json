@@ -1,9 +1,9 @@
 {
     "ServiceSpec": {
-        "Name": "building_identification_agent",
+        "Name": "buildingidentificationagent",
         "TaskTemplate": {
             "ContainerSpec": {
-                "Image": "building_identification_agent:2.0.0",
+                "Image": "buildingidentificationagent:1.0.0-SNAPSHOT",
                 "Env": [
                     "JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
                 ],
@@ -13,11 +13,17 @@
                     },
                     {
                         "ConfigName": "postgis"
+                    },
+                    {
+                        "ConfigName": "geoserver"
                     }
                 ],
                 "Secrets": [
                     {
                         "SecretName": "postgis_password"
+                    },
+                    {
+                        "SecretName": "geoserver_password"
                     }
                 ]
             }
@@ -35,8 +41,8 @@
     },
     "endpoints": {
         "building_identification_agent": {
-            "url": "http://localhost:8080/building_identification_agent/",
-            "externalPath": "/building_identification_agent/"
+            "url": "http://localhost:8080/buildingidentificationagent/",
+            "externalPath": "/buildingidentificationagent/"
         }
     }
 }

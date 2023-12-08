@@ -1,0 +1,17 @@
+{
+    "services": {
+        "includes": [
+            "mapbox-vis",
+            "access-agent",
+            "buildingidentificationagent"
+        ],
+        "excludes": [
+            "citytiler",
+            "citydbimpexp",
+            "feature-info-agent"
+        ]
+    },
+    "volumes": {
+        "mapbox-vis-files": "mapbox-vis-files"
+    }
+}

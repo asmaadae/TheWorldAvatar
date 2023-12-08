@@ -1,0 +1,68 @@
+{
+    "name": "All Data",
+    "groups": [
+        {
+            "name": "Singapore",
+            "sources": [
+                {
+                    "id": "factories-source",
+                    "type": "vector",
+                    "tiles": [
+                        "http://localhost:3838/geoserver/geoserver/wms?service=WMS&version=1.1.0&request=GetMap&layers=geoserver%3Afactories&bbox={bbox-epsg-3857}&width=256&height=256&srs=EPSG%3A3857&format=application/vnd.mapbox-vector-tile"
+                    ]
+                },
+                {
+                    "id": "buildings-source",
+                    "type": "vector",
+                    "tiles": [
+                        "http://localhost:3838/geoserver/geoserver/wms?service=WMS&version=1.1.0&request=GetMap&layers=geoserver%3Abuildings&bbox={bbox-epsg-3857}&width=256&height=256&srs=EPSG%3A3857&format=application/vnd.mapbox-vector-tile"
+                    ]
+                }
+            ],
+            "layers": [
+                {
+                    "id": "factories-layer",
+                    "name": "Singapore chemical plants",
+                    "source": "factories-source",
+                    "source-layer": "factories",
+                    "type": "fill-extrusion",
+                    "order": 1,
+                    "layout": {
+                        "visibility": "visible"
+                    },
+                    "paint": {
+                        "fill-extrusion-color": "red",
+                        "fill-extrusion-opacity": 0.85,
+                        "fill-extrusion-base": 0,
+                        "fill-extrusion-height": [
+                            "get",
+                            "height"
+                        ],
+                        "fill-extrusion-vertical-gradient": false
+                    }
+                },
+                {
+                    "id": "buildings-layer",
+                    "name": "Singapore buildings",
+                    "source": "buildings-source",
+                    "source-layer": "buildings",
+                    "type": "fill-extrusion",
+                    "order": 1,
+                    "layout": {
+                        "visibility": "visible"
+                    },
+                    "paint": {
+                        "fill-extrusion-color": "white",
+                        "fill-extrusion-opacity": 0.85,
+                        "fill-extrusion-base": 0,
+                        "fill-extrusion-height": [
+                            "get",
+                            "height"
+                        ],
+                        "fill-extrusion-vertical-gradient": false
+                    }
+                }
+            ]
+        }
+    ]
+}

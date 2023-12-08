@@ -6,10 +6,17 @@ import org.apache.jena.arq.querybuilder.SelectBuilder;
 import org.apache.jena.arq.querybuilder.UpdateBuilder;
 import org.apache.jena.arq.querybuilder.WhereBuilder;
 import org.apache.jena.geosparql.implementation.parsers.wkt.WKTReader;
+import org.apache.jena.sparql.function.library.print;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.cmclinnovations.stack.clients.core.StackClient;
+import com.cmclinnovations.stack.clients.gdal.GDALClient;
+import com.cmclinnovations.stack.clients.gdal.Ogr2OgrOptions;
+import com.cmclinnovations.stack.clients.geoserver.GeoServerClient;
+import com.cmclinnovations.stack.clients.geoserver.GeoServerVectorSettings;
+import com.cmclinnovations.stack.clients.geoserver.UpdatedGSVirtualTableEncoder;
+
 import uk.ac.cam.cares.jps.base.agent.JPSAgent;
 import uk.ac.cam.cares.jps.base.config.JPSConstants;
 import uk.ac.cam.cares.jps.base.query.RemoteRDBStoreClient;
@@ -57,7 +64,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
     private RemoteRDBStoreClient rdbStoreClient;
     private RemoteStoreClient storeClient;
-    private String defaultLabel;
+    private String defaultLabel, externalEndpoint;
     private Map<String, Double> factoryBuildingHeights = new HashMap<>();
     private Map<String, String> iriToLabel = new HashMap<>();
     private static final Logger LOGGER = LogManager.getLogger(BuildingIdentificationAgent.class);
@@ -103,7 +110,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 // Initialize values of storeClient and rdbStoreClient
                 String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
                         : stackAccessAgentBase + defaultLabel;
-                setStoreClient(route);
+                // setStoreClient(route);
+                storeClient = new RemoteStoreClient(externalEndpoint);
                 if (requestParams.has("dbUrl")) {
                     dbUrl = requestParams.getString("dbUrl");
                     dbUser = requestParams.getString("dbUser");
@@ -118,16 +126,19 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 maxDistance = Double.parseDouble(requestParams.getString(KEY_DISTANCE));
                 Map<String, double[]> factoryLocations = getFactoryLocations(route);
                 Map<String, Geometry> factoryToBuilding = linkBuildings(factoryLocations);
+                createFactoriesLayer(factoryToBuilding);
+                createBuildingsLayer();
                 // List<Integer> cityObjectIdList = new ArrayList<>(factoryToBuilding.values());
                 // Map<Integer, List<Coordinate[]>> objectGeometry =
                 // getSurfaceGeometry(cityObjectIdList);
                 // writeCesiumInput(factoryToBuilding, objectGeometry);
-                instantiateBuildingsTriples(factoryToBuilding.keySet());
+                // instantiateBuildingsTriples(factoryToBuilding.keySet());
 
             } else if (requestParams.getString(KEY_REQ_URL).contains(URI_DELETE)) {
                 String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
                         : stackAccessAgentBase + defaultLabel;
-                setStoreClient(route);
+                // setStoreClient(route);
+                storeClient = new RemoteStoreClient(externalEndpoint, externalEndpoint);
                 deleteBuildingsTriples(route);
 
             }
@@ -148,6 +159,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
         contactUri = config.getString("uri.ontology.contact");
         stackAccessAgentBase = config.getString("access.url");
         defaultLabel = config.getString("route.label");
+        externalEndpoint = config.getString("blazegraph.endpoint");
 
     }
 
@@ -156,7 +168,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
      * 
      */
     private void getDbSrid() {
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+        try (Connection conn = rdbStoreClient.getConnection();
                 Statement stmt = conn.createStatement();) {
             String sqlString = "SELECT srid,gml_srs_name from database_srs";
             ResultSet result = stmt.executeQuery(sqlString);
@@ -206,7 +218,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 .addVar("name")
                 .addWhere(wb);
 
-        JSONArray queryResult = AccessAgentCaller.queryStore(route, sb.buildString());
+        JSONArray queryResult = storeClient.executeQuery(sb.buildString());
 
         for (int i = 0; i < queryResult.length(); i++) {
             String factoryIri = queryResult.getJSONObject(i).getString("factory");
@@ -240,18 +252,19 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
         Map<String, Geometry> factoryToBuilding = new HashMap<>();
 
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+        try (Connection conn = rdbStoreClient.getConnection();
                 Statement stmt = conn.createStatement();) {
 
             for (String key : factoryLocations.keySet()) {
 
                 double[] coords = factoryLocations.get(key);
                 String sqlString = String.format(
-                        "select id, measured_height public.ST_AsText(envelope) as wkt from cityobject, building" +
+                        "select cityobject.id, measured_height as height, public.ST_AsText(envelope) as wkt from cityobject, building"
+                                +
                                 System.lineSeparator() +
                                 "where public.ST_Intersects(public.ST_Point(%f,%f, %d),envelope)" +
                                 System.lineSeparator() +
-                                "AND objectclass_id = 26 AND cityobject.id = building.id;",
+                                "AND cityobject.objectclass_id = 26 AND cityobject.id = building.id;",
                         coords[0], coords[1], dbSrid);
 
                 ResultSet result = stmt.executeQuery(sqlString);
@@ -296,6 +309,133 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
     }
 
+    /*
+     * Creates POSTGIS table and GeoServer layer with the LoD0 footprints of
+     * the buildings matched to factories.
+     */
+
+    private void createFactoriesLayer(Map<String, Geometry> factoryToBuilding) {
+
+        JSONObject featureCollection = new JSONObject();
+        featureCollection.put("type", "FeatureCollection");
+        JSONArray features = new JSONArray();
+
+        for (String key : factoryToBuilding.keySet()) {
+            Geometry footPrint = factoryToBuilding.get(key);
+            JSONObject geometry = new JSONObject();
+            geometry.put("type", "Polygon");
+            JSONArray geomArray = new JSONArray();
+            Arrays.stream(footPrint.getCoordinates()).forEach(coord -> {
+                double[] xyOriginal = { coord.x, coord.y };
+                double[] xyTransformed = CRSTransformer.transform("EPSG:" + dbSrid, "EPSG:4326", xyOriginal);
+                geomArray.put(new JSONArray(xyTransformed));
+            });
+
+            JSONArray coordinates = new JSONArray();
+            coordinates.put(geomArray);
+
+            geometry.put("coordinates", coordinates);
+            JSONObject feature = new JSONObject();
+            feature.put("type", "Feature");
+            feature.put("geometry", geometry);
+            JSONObject properties = new JSONObject();
+            properties.put("iri", key);
+            properties.put("color", "#666666");
+            properties.put("opacity", 0.66);
+            properties.put("base", 0);
+            properties.put("height", factoryBuildingHeights.get(key));
+            feature.put("properties", properties);
+            features.put(feature);
+
+        }
+
+        featureCollection.put("features", features);
+
+        GDALClient gdalClient = GDALClient.getInstance();
+        GeoServerClient geoServerClient = GeoServerClient.getInstance();
+
+        String db = "postgres";
+        String tableName = "factories";
+        String geoserverWorkspace = "geoserver";
+
+        gdalClient.uploadVectorStringToPostGIS("postgres", "factories",
+                featureCollection.toString(), new Ogr2OgrOptions(), true);
+        geoServerClient.createWorkspace(geoserverWorkspace);
+        geoServerClient.createPostGISLayer(geoserverWorkspace, db,
+                tableName, new GeoServerVectorSettings());
+    }
+
+    private void createBuildingsLayer() {
+        GeoServerClient geoServerClient = GeoServerClient.getInstance();
+        GeoServerVectorSettings geoServerVectorSettings = new GeoServerVectorSettings();
+
+        UpdatedGSVirtualTableEncoder virtualTable = new UpdatedGSVirtualTableEncoder();
+        virtualTable.setSql(String.format(
+                "select measured_height as height, envelope from building, cityobject where building.id = cityobject.id and objectclass_id = 26"));
+        virtualTable.setEscapeSql(true);
+        virtualTable.setName("sg_buildings_lod1");
+        virtualTable.addVirtualTableGeometry("wkb_geometry", "Polygon", String.valueOf(dbSrid));
+        geoServerVectorSettings.setVirtualTable(virtualTable);
+
+        String db = "postgres";
+        String tableName = "sg_buildings_lod1";
+        String geoserverWorkspace = "geoserver";
+
+        geoServerClient.createPostGISLayer(geoserverWorkspace, db,
+                tableName, geoServerVectorSettings);
+    }
+
+    /**
+     * Deletes all triples specifying the GmlId of a particular factory.
+     * 
+     * @param iri   IRI to delete
+     * @param route access agent route
+     */
+    private void deleteBuildingsTriples(String route) {
+        UpdateBuilder db = new UpdateBuilder()
+                .addWhere("?s", contains, "?o").addWhere("?o", rdfType, buildingType);
+
+        db.addDeleteQuads(db.buildDeleteWhere().getQuads());
+        AccessAgentCaller.updateStore(route, db.buildRequest().toString());
+    }
+
+    /**
+     * Sets store client to the query and update endpoint of route
+     * 
+     * @param route access agent route
+     */
+    private void setStoreClient(String queryEndpoint) {
+        if (isDockerized())
+            storeClient = new RemoteStoreClient(endpointConfig.getKgurl(), endpointConfig.getKgurl());
+        else
+            storeClient = new RemoteStoreClient(queryEndpoint, queryEndpoint);
+    }
+
+    /**
+     * Check if the agent is running in Docker
+     * 
+     * @return true if running in Docker, false otherwise
+     */
+    private boolean isDockerized() {
+        File f = new File("/.dockerenv");
+        return f.exists();
+    }
+
+    /**
+     * Checks if a string is able to be parsable as a number
+     * 
+     * @param number string to check
+     * @return boolean value of check
+     */
+    public boolean isNumber(String number) {
+        try {
+            Double.parseDouble(number);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /**
      * @deprecated
      * @param cityObjectIdList: List of cityObject Ids which are integers.
@@ -315,7 +455,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
         String query = sql + cityObjectListString;
         Map<Integer, List<Coordinate[]>> objectGeometry = new HashMap<>();
 
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+        try (Connection conn = rdbStoreClient.getConnection();
                 Statement stmt = conn.createStatement();) {
 
             ResultSet result = stmt.executeQuery(query);
@@ -428,95 +568,6 @@ public class BuildingIdentificationAgent extends JPSAgent {
         // AccessAgentCaller.updateStore(route, ub.toString());
         storeClient.executeUpdate(ub.toString());
 
-    }
-
-    /*
-     * Creates POSTGIS table and GeoServer layer with the LoD0 building footprints.
-     */
-
-    private void createMapboxData(Map<String, Geometry> factoryToBuilding) {
-
-        JSONObject featureCollection = new JSONObject();
-        featureCollection.put("type", "FeatureCollection");
-        JSONArray features = new JSONArray();
-
-        for (String key : factoryToBuilding.keySet()) {
-            Geometry footPrint = factoryToBuilding.get(key);
-            JSONObject geometry = new JSONObject();
-            geometry.put("type", "Polygon");
-            JSONArray geomArray = new JSONArray();
-            Arrays.stream(footPrint.getCoordinates()).forEach(coord -> {
-                double[] xyOriginal = { coord.x, coord.y };
-                double[] xyTransformed = CRSTransformer.transform("EPSG:" + dbSrid, "EPSG:4326", xyOriginal);
-                geomArray.put(new JSONArray(xyTransformed));
-            }
-
-            );
-
-            geometry.put("coordinates", geomArray);
-            JSONObject feature = new JSONObject();
-            feature.put("type", "Feature");
-            feature.put("geometry", geometry);
-            JSONObject properties = new JSONObject();
-            properties.put("iri", key);
-            properties.put("time", simulationTime);
-            properties.put("derivation", derivationIri);
-            properties.put("height", factoryBuildingHeights.get(key));
-
-        }
-
-        return;
-    }
-
-    /**
-     * Deletes all triples specifying the GmlId of a particular factory.
-     * 
-     * @param iri   IRI to delete
-     * @param route access agent route
-     */
-    private void deleteBuildingsTriples(String route) {
-        UpdateBuilder db = new UpdateBuilder()
-                .addWhere("?s", contains, "?o").addWhere("?o", rdfType, buildingType);
-
-        db.addDeleteQuads(db.buildDeleteWhere().getQuads());
-        AccessAgentCaller.updateStore(route, db.buildRequest().toString());
-    }
-
-    /**
-     * Sets store client to the query and update endpoint of route
-     * 
-     * @param route access agent route
-     */
-    private void setStoreClient(String queryEndpoint) {
-        if (isDockerized())
-            storeClient = new RemoteStoreClient(endpointConfig.getKgurl(), endpointConfig.getKgurl());
-        else
-            storeClient = new RemoteStoreClient(queryEndpoint, queryEndpoint);
-    }
-
-    /**
-     * Check if the agent is running in Docker
-     * 
-     * @return true if running in Docker, false otherwise
-     */
-    private boolean isDockerized() {
-        File f = new File("/.dockerenv");
-        return f.exists();
-    }
-
-    /**
-     * Checks if a string is able to be parsable as a number
-     * 
-     * @param number string to check
-     * @return boolean value of check
-     */
-    public boolean isNumber(String number) {
-        try {
-            Double.parseDouble(number);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
     }
 
 }

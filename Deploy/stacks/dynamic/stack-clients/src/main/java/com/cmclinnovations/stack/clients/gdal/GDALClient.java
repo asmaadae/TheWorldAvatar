@@ -1,5 +1,6 @@
 package com.cmclinnovations.stack.clients.gdal;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,6 +14,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +27,7 @@ import com.cmclinnovations.stack.clients.postgis.PostGISClient;
 import com.cmclinnovations.stack.clients.postgis.PostGISEndpointConfig;
 import com.cmclinnovations.stack.clients.utils.FileUtils;
 import com.cmclinnovations.stack.clients.utils.TempDir;
+import com.cmclinnovations.swagger.superset.JSON;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
@@ -180,12 +184,12 @@ public class GDALClient extends ContainerClient {
             String[] sridAuthNameArray = newSrid.split(":");
             String authName = sridAuthNameArray[0];
             String srid = sridAuthNameArray[1];
-            PostGISClient.getInstance().addProjectionsToPostgis(postGISContainerId, databaseName, proj4String, wktString,
+            PostGISClient.getInstance().addProjectionsToPostgis(postGISContainerId, databaseName, proj4String,
+                    wktString,
                     authName, srid);
             GeoServerClient.getInstance().addProjectionsToGeoserver(geoserverContainerID, wktString, srid);
         }
     }
-
 
     private String getDetectedSrid(String gdalContainerId, String filePath) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -209,17 +213,62 @@ public class GDALClient extends ContainerClient {
         return outputStream.toString().replace("\n", "");
     }
 
-    private String getWktString(String gdalContainerId, String filePath) { 
+    private String getWktString(String gdalContainerId, String filePath) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
-        String execId = createComplexCommand(gdalContainerId, GDALSRSINFO,  "-o", "wkt", "--single-line", filePath) // This will get either wkt1 or wkt2 whichever exists. Other options exist instead of "wkt": { wkt_all,  wkt1, wkt_simple, wkt_noct, wkt_esri, wkt2, wkt2_2015, wkt2_2018})
+        String execId = createComplexCommand(gdalContainerId, GDALSRSINFO, "-o", "wkt", "--single-line", filePath) // This
+                                                                                                                   // will
+                                                                                                                   // get
+                                                                                                                   // either
+                                                                                                                   // wkt1
+                                                                                                                   // or
+                                                                                                                   // wkt2
+                                                                                                                   // whichever
+                                                                                                                   // exists.
+                                                                                                                   // Other
+                                                                                                                   // options
+                                                                                                                   // exist
+                                                                                                                   // instead
+                                                                                                                   // of
+                                                                                                                   // "wkt":
+                                                                                                                   // {
+                                                                                                                   // wkt_all,
+                                                                                                                   // wkt1,
+                                                                                                                   // wkt_simple,
+                                                                                                                   // wkt_noct,
+                                                                                                                   // wkt_esri,
+                                                                                                                   // wkt2,
+                                                                                                                   // wkt2_2015,
+                                                                                                                   // wkt2_2018})
                 .withOutputStream(outputStream)
                 .withErrorStream(errorStream)
                 .exec();
         handleErrors(errorStream, execId, logger);
         return outputStream.toString();
     }
-    
+
+    private JSONArray getTimeFromGdalmdiminfo(String filePath) {
+        String gdalContainerId = getContainerId("gdal");
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
+        String execId = createComplexCommand(gdalContainerId, "gdalmdiminfo", "--detailed", filePath)
+                .withOutputStream(outputStream)
+                .withErrorStream(errorStream)
+                .exec();
+        handleErrors(errorStream, execId, logger);
+        
+        String inputString = outputStream.toString();
+        JSONObject jsonOutput = new JSONObject(inputString);
+        JSONArray timeValues = jsonOutput.getJSONObject("arrays").getJSONObject("yyyymmddhh").getJSONArray("values");
+
+        JSONArray times = new JSONArray();
+        for (int i = 1; i <= 720; i++) {
+            JSONObject timeObject = new JSONObject();
+            timeObject.put(Integer.toString(i), timeValues.getString(i).trim());
+            times.put(timeObject);
+        }
+        return times;
+    }
 
     private List<String> convertRastersToGeoTiffs(String gdalContainerId, String databaseName, String schemaName,
             String layerName, TempDir tempDir, GDALTranslateOptions options) {
@@ -265,7 +314,8 @@ public class GDALClient extends ContainerClient {
                             .withErrorStream(errorStream)
                             .withEvaluationTimeout(300)
                             .exec();
-                    handleErrors(errorStream, execId, logger); 
+                    handleErrors(errorStream, execId, logger);
+                    getTimeFromGdalmdiminfo(filePath);
                 } else {
                     execId = createComplexCommand(gdalContainerId, options.appendToArgs("gdal_translate",
                             "-if", inputFormat,

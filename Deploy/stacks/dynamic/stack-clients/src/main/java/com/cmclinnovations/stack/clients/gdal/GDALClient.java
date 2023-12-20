@@ -1,6 +1,5 @@
 package com.cmclinnovations.stack.clients.gdal;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,6 +8,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,7 +27,6 @@ import com.cmclinnovations.stack.clients.postgis.PostGISClient;
 import com.cmclinnovations.stack.clients.postgis.PostGISEndpointConfig;
 import com.cmclinnovations.stack.clients.utils.FileUtils;
 import com.cmclinnovations.stack.clients.utils.TempDir;
-import com.cmclinnovations.swagger.superset.JSON;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
@@ -216,30 +215,7 @@ public class GDALClient extends ContainerClient {
     private String getWktString(String gdalContainerId, String filePath) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
-        String execId = createComplexCommand(gdalContainerId, GDALSRSINFO, "-o", "wkt", "--single-line", filePath) // This
-                                                                                                                   // will
-                                                                                                                   // get
-                                                                                                                   // either
-                                                                                                                   // wkt1
-                                                                                                                   // or
-                                                                                                                   // wkt2
-                                                                                                                   // whichever
-                                                                                                                   // exists.
-                                                                                                                   // Other
-                                                                                                                   // options
-                                                                                                                   // exist
-                                                                                                                   // instead
-                                                                                                                   // of
-                                                                                                                   // "wkt":
-                                                                                                                   // {
-                                                                                                                   // wkt_all,
-                                                                                                                   // wkt1,
-                                                                                                                   // wkt_simple,
-                                                                                                                   // wkt_noct,
-                                                                                                                   // wkt_esri,
-                                                                                                                   // wkt2,
-                                                                                                                   // wkt2_2015,
-                                                                                                                   // wkt2_2018})
+        String execId = createComplexCommand(gdalContainerId, GDALSRSINFO, "-o", "wkt", "--single-line", filePath) // This will get either wkt1 or wkt2 whichever exists.Other options exist instead of"wkt" :{wkt_all,wkt1,wkt_simple,wkt_noct,wkt_esri,wkt2, wkt2_2015, wkt2_2018})
                 .withOutputStream(outputStream)
                 .withErrorStream(errorStream)
                 .exec();
@@ -247,27 +223,40 @@ public class GDALClient extends ContainerClient {
         return outputStream.toString();
     }
 
-    private JSONArray getTimeFromGdalmdiminfo(String filePath) {
+    private JSONArray getTimeFromGdalmdiminfo(String arrayName, String filePath) {
         String gdalContainerId = getContainerId("gdal");
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
-        String execId = createComplexCommand(gdalContainerId, "gdalmdiminfo", "--detailed", filePath)
+        String execId = createComplexCommand(gdalContainerId, "gdalmdiminfo", "-detailed", "-array", arrayName, filePath)
                 .withOutputStream(outputStream)
                 .withErrorStream(errorStream)
                 .exec();
         handleErrors(errorStream, execId, logger);
         
-        String inputString = outputStream.toString();
-        JSONObject jsonOutput = new JSONObject(inputString);
-        JSONArray timeValues = jsonOutput.getJSONObject("arrays").getJSONObject("yyyymmddhh").getJSONArray("values");
+        String inputString = outputStream.toString().replace(" ", "");
+        return new JSONObject(inputString).getJSONArray("values");
+    }
 
-        JSONArray times = new JSONArray();
-        for (int i = 1; i <= 720; i++) {
-            JSONObject timeObject = new JSONObject();
-            timeObject.put(Integer.toString(i), timeValues.getString(i).trim());
-            times.put(timeObject);
+    private void multipleRastersFromMultiDim(String arrayName,String filePath){
+        JSONArray arrayList = getTimeFromGdalmdiminfo(arrayName, filePath); // to generate output filenames
+        String gdalContainerId = getContainerId("gdal");
+
+        Integer index = 1; // need to cast to string in ComplexCommand
+        for (Iterator<Object> iterator = arrayList.iterator(); iterator.hasNext(); index++){
+            String outputRasterFileName = (String) iterator.next();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
+            String execId = createComplexCommand(gdalContainerId, "gdalwarp", "-srcband", index.toString(), "-t_srs", "EPSG:4326", "-r", "cubicspline", "-wo", "OPTIMIZE_SIZE=YES", "-multi", "-wo", "NUM_THREADS=ALL_CPUS", filePath, outputRasterFileName)
+            .withOutputStream(outputStream)
+                .withErrorStream(errorStream)
+                .exec();
+        handleErrors(errorStream, execId, logger);
         }
-        return times;
+
+        
+    
+        // gdalwarp -b 1 -t_srs EPSG:4326 -r cubicspline -wo OPTIMIZE_SIZE=YES -multi -wo NUM_THREADS=ALL_CPUS 
+        // input: NETCDF:tas_rcp85_land-cpm_uk_2.2km_01_1hr_20400101-20400130.nc:tas tas_rcp85_land-cpm_uk_2.2km_01_1hr_20400101-20400130.tif
     }
 
     private List<String> convertRastersToGeoTiffs(String gdalContainerId, String databaseName, String schemaName,
@@ -315,7 +304,7 @@ public class GDALClient extends ContainerClient {
                             .withEvaluationTimeout(300)
                             .exec();
                     handleErrors(errorStream, execId, logger);
-                    getTimeFromGdalmdiminfo(filePath);
+                    multipleRastersFromMultiDim("yyyymmddhh", filePath);                    
                 } else {
                     execId = createComplexCommand(gdalContainerId, options.appendToArgs("gdal_translate",
                             "-if", inputFormat,

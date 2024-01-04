@@ -1,6 +1,7 @@
 flask
 matplotlib
 pandas
+openpyxl
 altgraph==0.15
 future==0.16.0
 macholib==1.9
@@ -14,8 +15,5 @@ requests
 py4jps==1.0.34
 pypiwin32==223; sys_platform == 'win32'
 pywin32==223; sys_platform == 'win32'
-https://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-win_amd64.whl; sys_platform == 'win32'
-https://download.pytorch.org/whl/cpu/torch-0.4.1-cp36-cp36m-linux_x86_64.whl; sys_platform == 'linux'
-git+https://github.com/cornellius-gp/gpytorch@alpha
 git+https://github.com/cambridge-cares/TheWorldAvatar@main#subdirectory=Agents/utils/python-utils
 

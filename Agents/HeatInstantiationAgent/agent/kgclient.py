@@ -10,8 +10,8 @@ import json
 
 from py4jps import agentlogging
 
-from exceptions import KGException
-from javagateway import jpsBaseLibGW
+from agent.exceptions import KGException
+from agent.javagateway import jpsBaseLibGW
 
 # Initialise logger
 logger = agentlogging.get_logger("prod")

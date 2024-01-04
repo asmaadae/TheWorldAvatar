@@ -5,7 +5,8 @@ import requests
 from py4jps import agentlogging
 import json
 import uuid
-from kgclient import KGClient
+from agent.kgclient import KGClient
+from agent.stack_configs import retrieve_stack_configs
 import os
 
 
@@ -25,11 +26,20 @@ has_unit = "<http://www.ontology-of-units-of-measure.org/resource/om-2/hasUnit>"
 @get_heat_data_bp.route(ROUTE, methods=['GET'])
 def api():
     logger.info("Received request to read and instantiate heat data")
-    data_file = request.args["dataFile"]
+    dirname = os.path.dirname(__file__)
+    data_file = os.path.join(dirname, '../data/heat.xlsx')
     triples = get_heat_chemicals(data_file)
-    update_endpoint = request.args["endPoint"]
+    if "endpoint" in request.args:
+        update_endpoint = request.args["endpoint"]
+    elif "namespace" in request.args:
+        update_endpoint = retrieve_stack_configs(request.args["namespace"])
+    else:
+        logger.error("Neither endpoint nor namespace has been specified.")
+        return "Either the endpoint or namespace parameter must be specified", 400
+
     kgclient_heat = KGClient(update_endpoint, update_endpoint)
-    return instantiate_data(triples, kgclient_heat)
+    instantiate_data(triples, kgclient_heat)
+    return json.dumps({'success': True}), 200, {'ContentType': 'application/json'}
 
 
 def get_class(iri: str) -> str:

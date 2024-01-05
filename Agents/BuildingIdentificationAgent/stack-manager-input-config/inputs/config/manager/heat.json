@@ -2,13 +2,14 @@
     "services": {
         "includes": [
             "mapbox-vis",
-            "access-agent",
-            "buildingidentificationagent"
+            "heat-instantiation",
+            "heatemissionagent",
+            "buildingidentificationagent",
+            "feature-info-agent"
         ],
         "excludes": [
             "citytiler",
-            "citydbimpexp",
-            "feature-info-agent"
+            "citydbimpexp"
         ]
     },
     "volumes": {

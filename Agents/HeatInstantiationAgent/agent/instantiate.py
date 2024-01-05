@@ -215,6 +215,17 @@ def get_address(factory_iri: str, company_name_str: str, latitude_num: float, lo
     return address_data
 
 
+def get_thermal_efficiency(factory_iri: str, efficiency: float) -> pd.DataFrame:
+    """
+    Returns a Dataframe containing the triples for thermal efficiency
+    """
+    has_thermal_efficiency = "<http://www.theworldavatar.com/kg/ontocompany/hasThermalEfficiency>"
+    efficiency_value = get_double(efficiency)
+    efficiency_data = pd.DataFrame({"subject": [factory_iri], "predicate": [
+                                   has_thermal_efficiency], "object": [efficiency_value]})
+    return efficiency_data
+
+
 def get_heat_chemicals(data_file: str) -> pd.DataFrame:
     """ 
     Read chemical plants data from the provided excel file 
@@ -240,6 +251,7 @@ def get_heat_chemicals(data_file: str) -> pd.DataFrame:
         longitude_num = row["Longitude"]
         postal_code_num = row["Postal Code"]
         year_num = row["Year of Formation"]
+        thermal_efficiency = row["Thermal efficiency"]
 
         company_data = get_company(
             company_name, year_num, ssic_code_num, business_activity)
@@ -253,9 +265,11 @@ def get_heat_chemicals(data_file: str) -> pd.DataFrame:
             factory_iri, company_name, design_capacity_num)
         address_data = get_address(
             factory_iri, company_name, latitude_num, longitude_num, postal_code_num)
+        efficiency_data = get_thermal_efficiency(
+            factory_iri, thermal_efficiency)
 
         triples = pd.concat([triples, company_data, chemical_plant_data,
-                            specific_energy_data, design_capacity_data, address_data])
+                            specific_energy_data, design_capacity_data, address_data, efficiency_data])
 
     return triples
 

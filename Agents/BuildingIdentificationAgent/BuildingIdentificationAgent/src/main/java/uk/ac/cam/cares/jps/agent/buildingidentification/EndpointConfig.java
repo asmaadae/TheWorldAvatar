@@ -13,11 +13,11 @@ public class EndpointConfig {
     private String kguser;
     private String kgpassword;
 
-    public EndpointConfig() {
+    public EndpointConfig(String namespace) {
         ContainerClient containerClient = new ContainerClient();
         BlazegraphEndpointConfig blazegraphEndpointConfig = containerClient.readEndpointConfig("blazegraph",
                 BlazegraphEndpointConfig.class);
-        this.kgurl = blazegraphEndpointConfig.getUrl("kb");
+        this.kgurl = blazegraphEndpointConfig.getUrl(namespace);
         this.kguser = blazegraphEndpointConfig.getUsername();
         this.kgpassword = blazegraphEndpointConfig.getPassword();
         postGISEndpointConfig = containerClient.readEndpointConfig("postgis", PostGISEndpointConfig.class);

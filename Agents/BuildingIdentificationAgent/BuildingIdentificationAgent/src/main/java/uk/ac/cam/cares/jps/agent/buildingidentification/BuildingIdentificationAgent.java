@@ -39,6 +39,8 @@ import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.impl.CoordinateArraySequence;
 import org.locationtech.jts.geom.Point;
 
+import uk.ac.cam.cares.jps.agent.buildingidentification.objects.Factory;
+
 @WebServlet(urlPatterns = {
         BuildingIdentificationAgent.URI_RUN,
         BuildingIdentificationAgent.URI_DELETE
@@ -54,19 +56,22 @@ public class BuildingIdentificationAgent extends JPSAgent {
     public static final String KEY_DISTANCE = "maxDistance";
     private String ontocompanyUri, contactUri;
     private static final String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
-    private static final String rdf = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#>";
+    private static final String rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     private static final String rdfType = rdf + "type";
+    private static final String ontoMeasurePrefix = "http://www.ontology-of-units-of-measure.org/resource/om-2/";
 
     public static final String STACK_NAME = "<STACK NAME>";
     private String stackName;
     private String stackAccessAgentBase;
-    EndpointConfig endpointConfig = new EndpointConfig();
+    EndpointConfig endpointConfig = new EndpointConfig("sgbusinessunits");
 
     private RemoteRDBStoreClient rdbStoreClient;
     private RemoteStoreClient storeClient;
     private String defaultLabel, externalEndpoint;
-    private Map<String, Double> factoryBuildingHeights = new HashMap<>();
-    private Map<String, String> iriToLabel = new HashMap<>();
+
+    private List<Factory> factories = new ArrayList<>();
+    private Set<String> factoryTypes = new HashSet<>();
+
     private static final Logger LOGGER = LogManager.getLogger(BuildingIdentificationAgent.class);
 
     // Properties of database containing buildings data.
@@ -111,7 +116,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
                         : stackAccessAgentBase + defaultLabel;
                 // setStoreClient(route);
-                storeClient = new RemoteStoreClient(externalEndpoint);
+                String endpoint = endpointConfig.getKgurl();
+                storeClient = new RemoteStoreClient(endpoint);
                 if (requestParams.has("dbUrl")) {
                     dbUrl = requestParams.getString("dbUrl");
                     dbUser = requestParams.getString("dbUser");
@@ -124,10 +130,11 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 rdbStoreClient = new RemoteRDBStoreClient(dbUrl, dbUser, dbPassword);
                 getDbSrid();
                 maxDistance = Double.parseDouble(requestParams.getString(KEY_DISTANCE));
-                Map<String, double[]> factoryLocations = getFactoryLocations(route);
-                Map<String, Geometry> factoryToBuilding = linkBuildings(factoryLocations);
-                createFactoriesLayer(factoryToBuilding);
-                createBuildingsLayer();
+                getFactoryProperties();
+                linkBuildings();
+                createFactoriesTable();
+                createGeoServerLayers();
+
                 // List<Integer> cityObjectIdList = new ArrayList<>(factoryToBuilding.values());
                 // Map<Integer, List<Coordinate[]>> objectGeometry =
                 // getSurfaceGeometry(cityObjectIdList);
@@ -199,23 +206,27 @@ public class BuildingIdentificationAgent extends JPSAgent {
         return validate;
     }
 
-    private Map<String, double[]> getFactoryLocations(String route) {
-        Map<String, double[]> factoryLocations = new HashMap<>();
+    private void getFactoryProperties() {
 
         WhereBuilder wb = new WhereBuilder()
                 .addPrefix("ontocompany", ontocompanyUri)
-                .addPrefix("con", contactUri).addPrefix("rdfs", rdfs);
+                .addPrefix("con", contactUri).addPrefix("rdfs", rdfs)
+                .addPrefix("om", ontoMeasurePrefix).addPrefix("rdf", rdf);
 
         String addressVar = "?address";
         wb.addWhere("?factory", "con:hasAddress", addressVar)
                 .addWhere("?factory", "rdfs:label", "?name")
                 .addWhere(addressVar, "ontocompany:hasLongitudeEPSG4326", "?lon").addWhere(addressVar,
-                        "ontocompany:hasLatitudeEPSG4326", "?lat");
+                        "ontocompany:hasLatitudeEPSG4326", "?lat")
+                .addWhere("?factory", "ontocompany:hasGeneratedHeat/om:hasValue/om:hasNumericalValue", "?heat")
+                .addWhere("?factory", "rdf:type", "?facType");
         SelectBuilder sb = new SelectBuilder()
                 .addVar("factory")
                 .addVar("lon")
                 .addVar("lat")
                 .addVar("name")
+                .addVar("heat")
+                .addVar("facType")
                 .addWhere(wb);
 
         JSONArray queryResult = storeClient.executeQuery(sb.buildString());
@@ -225,39 +236,43 @@ public class BuildingIdentificationAgent extends JPSAgent {
             Double longitude = queryResult.getJSONObject(i).getDouble("lon");
             Double latitude = queryResult.getJSONObject(i).getDouble("lat");
             String factoryName = queryResult.getJSONObject(i).getString("name");
+            Double heat = queryResult.getJSONObject(i).getDouble("heat");
+            String facType = queryResult.getJSONObject(i).getString("facType");
             String originalSrid = "EPSG:4326";
             double[] xyOriginal = { longitude, latitude };
             double[] xyTransformed = CRSTransformer.transform(originalSrid, "EPSG:" + dbSrid, xyOriginal);
-            factoryLocations.put(factoryIri, xyTransformed);
-            iriToLabel.put(factoryIri, factoryName);
+            Point factoryLocation = new Point(
+                    new CoordinateArraySequence(
+                            new Coordinate[] { new Coordinate(xyTransformed[0], xyTransformed[1]) }),
+                    new GeometryFactory());
+
+            factoryLocation.setSRID(dbSrid);
+            Factory plant = new Factory(facType, factoryIri, factoryName, heat, factoryLocation);
+            factories.add(plant);
+            factoryTypes.add(facType);
+
         }
 
-        numberFactoriesQueried = factoryLocations.size();
-        return factoryLocations;
-
+        numberFactoriesQueried = factories.size();
     }
 
     /**
      * Identifies the building whose envelope centroid is closest to the coordinate
      * of each factory.
      * 
-     * @param factoryLocations HashMap whose keys are factory IRIs and values are
-     *                         its coordinates
+     * @param factories ArrayList of factories. Each object must have its
+     *                  coordinates specified.
      * 
-     * @return HashMap containing factory IRIs as keys and the LoD0 footprints of
-     *         matched buildings as values.
+     * 
+     * @return None
      */
 
-    private Map<String, Geometry> linkBuildings(Map<String, double[]> factoryLocations) {
-
-        Map<String, Geometry> factoryToBuilding = new HashMap<>();
+    private void linkBuildings() {
 
         try (Connection conn = rdbStoreClient.getConnection();
                 Statement stmt = conn.createStatement();) {
 
-            for (String key : factoryLocations.keySet()) {
-
-                double[] coords = factoryLocations.get(key);
+            for (Factory fac : factories) {
                 String sqlString = String.format(
                         "select cityobject.id, measured_height as height, public.ST_AsText(envelope) as wkt from cityobject, building"
                                 +
@@ -265,13 +280,11 @@ public class BuildingIdentificationAgent extends JPSAgent {
                                 "where public.ST_Intersects(public.ST_Point(%f,%f, %d),envelope)" +
                                 System.lineSeparator() +
                                 "AND cityobject.objectclass_id = 26 AND cityobject.id = building.id;",
-                        coords[0], coords[1], dbSrid);
+                        fac.location.getX(), fac.location.getY(), dbSrid);
 
                 ResultSet result = stmt.executeQuery(sqlString);
                 Double dist = Double.MAX_VALUE;
-                Point reference = new Point(
-                        new CoordinateArraySequence(new Coordinate[] { new Coordinate(coords[0], coords[1]) }),
-                        new GeometryFactory());
+                Point reference = fac.location;
                 Integer finalId = null;
                 Geometry buildingFootprint = null;
                 Double height = null;
@@ -292,36 +305,37 @@ public class BuildingIdentificationAgent extends JPSAgent {
                 }
 
                 if (dist <= maxDistance) {
-                    factoryToBuilding.put(key, buildingFootprint);
-                    factoryBuildingHeights.put(key, height);
+                    numberBuildingsIdentified++;
+                    fac.buildingFootprint = buildingFootprint;
+                    fac.buildingId = finalId;
+                    fac.buildingHeight = height;
                 } else {
                     LOGGER.warn("No building found for factory with IRI {} within the specified maximum distance.",
-                            key);
+                            fac.factoryIri);
                 }
             }
+
         } catch (SQLException e) {
             LOGGER.error(e.getMessage());
         }
 
-        numberBuildingsIdentified = factoryToBuilding.size();
-
-        return factoryToBuilding;
-
     }
 
     /*
-     * Creates POSTGIS table and GeoServer layer with the LoD0 footprints of
-     * the buildings matched to factories.
+     * Creates POSTGIS table with factory properties.
      */
 
-    private void createFactoriesLayer(Map<String, Geometry> factoryToBuilding) {
+    private void createFactoriesTable() {
 
         JSONObject featureCollection = new JSONObject();
         featureCollection.put("type", "FeatureCollection");
         JSONArray features = new JSONArray();
 
-        for (String key : factoryToBuilding.keySet()) {
-            Geometry footPrint = factoryToBuilding.get(key);
+        for (Factory fac : factories) {
+
+            Geometry footPrint = fac.buildingFootprint;
+            if (footPrint == null)
+                continue;
             JSONObject geometry = new JSONObject();
             geometry.put("type", "Polygon");
             JSONArray geomArray = new JSONArray();
@@ -339,11 +353,13 @@ public class BuildingIdentificationAgent extends JPSAgent {
             feature.put("type", "Feature");
             feature.put("geometry", geometry);
             JSONObject properties = new JSONObject();
-            properties.put("iri", key);
+            properties.put("iri", fac.factoryIri);
             properties.put("color", "#666666");
             properties.put("opacity", 0.66);
             properties.put("base", 0);
-            properties.put("height", factoryBuildingHeights.get(key));
+            properties.put("height", fac.buildingHeight);
+            properties.put("heat", fac.heatEmission);
+            properties.put("factoryType", fac.factoryClass);
             feature.put("properties", properties);
             features.put(feature);
 
@@ -352,17 +368,36 @@ public class BuildingIdentificationAgent extends JPSAgent {
         featureCollection.put("features", features);
 
         GDALClient gdalClient = GDALClient.getInstance();
-        GeoServerClient geoServerClient = GeoServerClient.getInstance();
-
-        String db = "postgres";
-        String tableName = "factories";
-        String geoserverWorkspace = "geoserver";
-
         gdalClient.uploadVectorStringToPostGIS("postgres", "factories",
-                featureCollection.toString(), new Ogr2OgrOptions(), true);
+                featureCollection.toString(), new Ogr2OgrOptions(), false);
+
+    }
+
+    /**
+     * Creates Geoserver layers for all industries
+     */
+
+    private void createGeoServerLayers() {
+
+        String geoserverWorkspace = "heat";
+        GeoServerClient geoServerClient = GeoServerClient.getInstance();
         geoServerClient.createWorkspace(geoserverWorkspace);
-        geoServerClient.createPostGISLayer(geoserverWorkspace, db,
-                tableName, new GeoServerVectorSettings());
+
+        for (String facType : factoryTypes) {
+            GeoServerVectorSettings geoServerVectorSettings = new GeoServerVectorSettings();
+            UpdatedGSVirtualTableEncoder virtualTable = new UpdatedGSVirtualTableEncoder();
+            virtualTable.setSql(String.format(
+                    "select * from factories where factoryType = \'%s\'", facType));
+            virtualTable.setEscapeSql(true);
+            String[] facSplit = facType.split("/");
+            String tableName = facSplit[facSplit.length - 1];
+            virtualTable.setName(tableName);
+            virtualTable.addVirtualTableGeometry("wkb_geometry", "Polygon", String.valueOf(dbSrid));
+            geoServerVectorSettings.setVirtualTable(virtualTable);
+            geoServerClient.createPostGISLayer(geoserverWorkspace, "postgres", tableName, geoServerVectorSettings);
+
+        }
+
     }
 
     private void createBuildingsLayer() {
@@ -500,7 +535,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
         for (String factoryIri : factoryToBuilding.keySet()) {
             int cityObjId = factoryToBuilding.get(factoryIri);
             List<Coordinate[]> polygons = objectGeometry.get(cityObjId);
-            String factoryName = iriToLabel.get(factoryIri);
+            String factoryName = "random";
 
             JSONObject featureObject = new JSONObject();
             featureObject.put("type", "feature");

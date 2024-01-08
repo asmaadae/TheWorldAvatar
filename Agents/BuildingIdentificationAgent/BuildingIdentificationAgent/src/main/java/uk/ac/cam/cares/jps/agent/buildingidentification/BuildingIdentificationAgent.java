@@ -215,7 +215,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
         String addressVar = "?address";
         wb.addWhere("?factory", "con:hasAddress", addressVar)
-                .addWhere("?factory", "rdfs:label", "?name")
+                .addWhere("?company", "ontocompany:isOwnerOf", "?factory")
+                .addWhere("?company", "rdfs:label", "?name")
                 .addWhere(addressVar, "ontocompany:hasLongitudeEPSG4326", "?lon").addWhere(addressVar,
                         "ontocompany:hasLatitudeEPSG4326", "?lat")
                 .addWhere("?factory", "ontocompany:hasGeneratedHeat/om:hasValue/om:hasNumericalValue", "?heat")
@@ -341,8 +342,9 @@ public class BuildingIdentificationAgent extends JPSAgent {
             JSONArray geomArray = new JSONArray();
             Arrays.stream(footPrint.getCoordinates()).forEach(coord -> {
                 double[] xyOriginal = { coord.x, coord.y };
-                double[] xyTransformed = CRSTransformer.transform("EPSG:" + dbSrid, "EPSG:4326", xyOriginal);
-                geomArray.put(new JSONArray(xyTransformed));
+                // double[] xyTransformed = CRSTransformer.transform("EPSG:" + dbSrid,
+                // "EPSG:4326", xyOriginal);
+                geomArray.put(new JSONArray(xyOriginal));
             });
 
             JSONArray coordinates = new JSONArray();
@@ -360,6 +362,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
             properties.put("height", fac.buildingHeight);
             properties.put("heat", fac.heatEmission);
             properties.put("factoryType", fac.factoryClass);
+            properties.put("name", fac.companyName);
             feature.put("properties", properties);
             features.put(feature);
 

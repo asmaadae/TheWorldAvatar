@@ -1,8 +1,10 @@
 {
     "name": "All Data",
+    "stack": "http://localhost:3838",
     "groups": [
         {
             "name": "Singapore industrial buildings",
+            "stack": "http://localhost:3838",
             "sources": [
                 {
                     "id": "ChemicalPlant-source",
@@ -34,9 +36,9 @@
                                 "heat"
                             ],
                             0,
-                            "hsl(300, 50%, 50%)",
-                            30,
-                            "hsl(0, 50%, 50%)"
+                            "rgb(0, 0, 255)",
+                            40,
+                            "rgb(255, 0, 0)"
                         ],
                         "fill-extrusion-opacity": 0.85,
                         "fill-extrusion-base": 0,

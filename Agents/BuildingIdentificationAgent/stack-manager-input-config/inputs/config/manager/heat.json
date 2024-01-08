@@ -13,6 +13,7 @@
         ]
     },
     "volumes": {
-        "mapbox-vis-files": "mapbox-vis-files"
+        "mapbox-vis-files": "mapbox-vis-files",
+        "fia-queries": "fia-queries"
     }
 }

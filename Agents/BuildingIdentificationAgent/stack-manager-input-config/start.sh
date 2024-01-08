@@ -86,6 +86,7 @@ then
     git clean -xdf "$MANAGER_VOLUMES/"
     cp -r "./inputs/volumes/." "$MANAGER_VOLUMES"
 
+
     # Write out the stack passwords
     echo $PASSWORD > "$ROOT/Deploy/stacks/dynamic/stack-manager/inputs/secrets/geoserver_password"
     echo $PASSWORD > "$ROOT/Deploy/stacks/dynamic/stack-manager/inputs/secrets/postgis_password"

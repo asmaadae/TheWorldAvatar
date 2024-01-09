@@ -41,33 +41,21 @@ import org.locationtech.jts.geom.Point;
 
 import uk.ac.cam.cares.jps.agent.buildingidentification.objects.Factory;
 
-@WebServlet(urlPatterns = {
-        BuildingIdentificationAgent.URI_RUN,
-        BuildingIdentificationAgent.URI_DELETE
-})
+@WebServlet(urlPatterns = { BuildingIdentificationAgent.URI_RUN })
 public class BuildingIdentificationAgent extends JPSAgent {
-    public static final String KEY_REQ_METHOD = "method";
+
     public static final String KEY_REQ_URL = "requestUrl";
-
     public static final String URI_RUN = "/run";
-    public static final String URI_DELETE = "/delete";
-
-    public static final String KEY_ROUTE = "route";
     public static final String KEY_DISTANCE = "maxDistance";
-    private String ontocompanyUri, contactUri;
     private static final String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
     private static final String rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     private static final String rdfType = rdf + "type";
+    private static final String ontoCompanyPrefix = "http://www.theworldavatar.com/kg/ontocompany/";
+    private static final String contactPrefix = "http://ontology.eil.utoronto.ca/icontact.owl#";
     private static final String ontoMeasurePrefix = "http://www.ontology-of-units-of-measure.org/resource/om-2/";
-
-    public static final String STACK_NAME = "<STACK NAME>";
-    private String stackName;
-    private String stackAccessAgentBase;
-    EndpointConfig endpointConfig = new EndpointConfig("sgbusinessunits");
 
     private RemoteRDBStoreClient rdbStoreClient;
     private RemoteStoreClient storeClient;
-    private String defaultLabel, externalEndpoint;
 
     private List<Factory> factories = new ArrayList<>();
     private Set<String> factoryTypes = new HashSet<>();
@@ -81,93 +69,62 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private String dbUser = null;
     private String dbPassword = null;
     private int dbSrid;
-    private String sridName;
     private double maxDistance;
     private int numberBuildingsIdentified = 0, numberFactoriesQueried = 0;
-    // private static final String predicate =
-    // "http://data.ordnancesurvey.co.uk/ontology/spatialrelations/hasGmlId";
-    // private static final String cityObjectId =
-    // "http://www.theworldavatar.com/kg/ontocitygml/cityObjectId";
     private static final String contains = "http://www.opengis.net/ont/geosparql#ehContains";
     private static final String building = "http://www.theworldavatar.com/kg/ontocompany/Building_";
     private static final String buildingType = "http://www.purl.org/oema/infrastructure/Building";
 
-    public BuildingIdentificationAgent() {
-        readConfig();
-        stackName = StackClient.getStackName();
-        stackAccessAgentBase = stackAccessAgentBase.replace(STACK_NAME, stackName);
-        // rdbStoreClient = new RemoteRDBStoreClient(dbUrl, dbUser, dbPassword);
-        // rdbStoreClient = new RemoteRDBStoreClient(endpointConfig.getDbUrl(dbName),
-        // endpointConfig.getDbUser(),
-        // endpointConfig.getDbPassword());
-    }
-
-    @Override
-    public JSONObject processRequestParameters(JSONObject requestParams, HttpServletRequest request) {
-        return processRequestParameters(requestParams);
-    }
-
     @Override
     public JSONObject processRequestParameters(JSONObject requestParams) {
         if (validateInput(requestParams)) {
-            if (requestParams.getString(KEY_REQ_URL).contains(URI_RUN)) {
 
-                // Initialize values of storeClient and rdbStoreClient
-                String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
-                        : stackAccessAgentBase + defaultLabel;
-                // setStoreClient(route);
-                String endpoint = endpointConfig.getKgurl();
-                storeClient = new RemoteStoreClient(endpoint);
-                if (requestParams.has("dbUrl")) {
-                    dbUrl = requestParams.getString("dbUrl");
-                    dbUser = requestParams.getString("dbUser");
-                    dbPassword = requestParams.getString("dbPassword");
-                } else {
-                    dbUrl = endpointConfig.getDbUrl("postgres");
-                    dbUser = endpointConfig.getDbUser();
-                    dbPassword = endpointConfig.getDbPassword();
-                }
-                rdbStoreClient = new RemoteRDBStoreClient(dbUrl, dbUser, dbPassword);
-                getDbSrid();
-                maxDistance = Double.parseDouble(requestParams.getString(KEY_DISTANCE));
-                getFactoryProperties();
-                linkBuildings();
-                createFactoriesTable();
-                createGeoServerLayers();
+            String endpoint = null;
+            EndpointConfig endpointConfig = null;
 
-                // List<Integer> cityObjectIdList = new ArrayList<>(factoryToBuilding.values());
-                // Map<Integer, List<Coordinate[]>> objectGeometry =
-                // getSurfaceGeometry(cityObjectIdList);
-                // writeCesiumInput(factoryToBuilding, objectGeometry);
-                // instantiateBuildingsTriples(factoryToBuilding.keySet());
-
-            } else if (requestParams.getString(KEY_REQ_URL).contains(URI_DELETE)) {
-                String route = requestParams.has(KEY_ROUTE) ? requestParams.getString(KEY_ROUTE)
-                        : stackAccessAgentBase + defaultLabel;
-                // setStoreClient(route);
-                storeClient = new RemoteStoreClient(externalEndpoint, externalEndpoint);
-                deleteBuildingsTriples(route);
-
+            if (requestParams.has("endpoint"))
+                endpoint = requestParams.getString("endpoint");
+            else {
+                String namespace = requestParams.getString("namespace");
+                endpointConfig = new EndpointConfig();
+                endpoint = endpointConfig.getKgurl(namespace);
             }
+
+            storeClient = new RemoteStoreClient(endpoint);
+            if (requestParams.has("dbUrl")) {
+                dbUrl = requestParams.getString("dbUrl");
+                dbUser = requestParams.getString("dbUser");
+                dbPassword = requestParams.getString("dbPassword");
+            } else {
+                dbUrl = endpointConfig.getDbUrl("postgres");
+                dbUser = endpointConfig.getDbUser();
+                dbPassword = endpointConfig.getDbPassword();
+            }
+
+            rdbStoreClient = new RemoteRDBStoreClient(dbUrl, dbUser, dbPassword);
+            getDbSrid();
+            maxDistance = Double.parseDouble(requestParams.getString(KEY_DISTANCE));
+            getFactoryProperties();
+            linkBuildings();
+            createFactoriesTable();
+            createGeoServerLayers();
         }
 
-        JSONObject responsObject = new JSONObject();
-        responsObject.put("number_factories", numberFactoriesQueried);
-        responsObject.put("number_buildings", numberBuildingsIdentified);
-        return responsObject;
+        JSONObject responseObject = new JSONObject();
+        responseObject.put("number_factories", numberFactoriesQueried);
+        responseObject.put("number_buildings", numberBuildingsIdentified);
+        return responseObject;
     }
 
     /**
-     * Gets variables from config.properties
+     * Checks validity of incoming request
+     * 
+     * @param requestParams Request parameters as JSONObject
+     * @return Validity of request
      */
-    private void readConfig() {
-        ResourceBundle config = ResourceBundle.getBundle("config");
-        ontocompanyUri = config.getString("uri.ontology.ontocompany");
-        contactUri = config.getString("uri.ontology.contact");
-        stackAccessAgentBase = config.getString("access.url");
-        defaultLabel = config.getString("route.label");
-        externalEndpoint = config.getString("blazegraph.endpoint");
-
+    @Override
+    public boolean validateInput(JSONObject requestParams) {
+        return isNumber(requestParams.getString(KEY_DISTANCE));
     }
 
     /**
@@ -181,7 +138,6 @@ public class BuildingIdentificationAgent extends JPSAgent {
             ResultSet result = stmt.executeQuery(sqlString);
             if (result.next()) {
                 dbSrid = result.getInt("srid");
-                sridName = result.getString("gml_srs_name");
             } else {
                 LOGGER.warn("Could not retrieve srid from database.");
             }
@@ -190,27 +146,11 @@ public class BuildingIdentificationAgent extends JPSAgent {
         }
     }
 
-    /**
-     * Checks validity of incoming request
-     * 
-     * @param requestParams Request parameters as JSONObject
-     * @return Validity of request
-     */
-    @Override
-    public boolean validateInput(JSONObject requestParams) {
-        boolean validate = true;
-
-        if (requestParams.getString(KEY_REQ_URL).contains(URI_RUN))
-            validate = isNumber(requestParams.getString(KEY_DISTANCE));
-
-        return validate;
-    }
-
     private void getFactoryProperties() {
 
         WhereBuilder wb = new WhereBuilder()
-                .addPrefix("ontocompany", ontocompanyUri)
-                .addPrefix("con", contactUri).addPrefix("rdfs", rdfs)
+                .addPrefix("ontocompany", ontoCompanyPrefix)
+                .addPrefix("con", contactPrefix).addPrefix("rdfs", rdfs)
                 .addPrefix("om", ontoMeasurePrefix).addPrefix("rdf", rdf);
 
         String addressVar = "?address";
@@ -260,74 +200,6 @@ public class BuildingIdentificationAgent extends JPSAgent {
     /**
      * Identifies the building whose envelope centroid is closest to the coordinate
      * of each factory.
-     * 
-     * @param factories ArrayList of factories. Each object must have its
-     *                  coordinates specified.
-     * 
-     * 
-     * @return None
-     */
-    @Deprecated
-    private void linkBuildingsOld() {
-
-        try (Connection conn = rdbStoreClient.getConnection();
-                Statement stmt = conn.createStatement();) {
-
-            for (Factory fac : factories) {
-                String sqlString = String.format(
-                        "select cityobject.id, measured_height as height, public.ST_AsText(envelope) as wkt from cityobject, building"
-                                +
-                                System.lineSeparator() +
-                                "where public.ST_Intersects(public.ST_Point(%f,%f, %d),envelope)" +
-                                System.lineSeparator() +
-                                "AND cityobject.objectclass_id = 26 AND cityobject.id = building.id;",
-                        fac.location.getX(), fac.location.getY(), dbSrid);
-
-                ResultSet result = stmt.executeQuery(sqlString);
-                Double dist = Double.MAX_VALUE;
-                Point reference = fac.location;
-                Integer finalId = null;
-                Geometry buildingFootprint = null;
-                Double height = null;
-
-                while (result.next()) {
-                    Integer id = result.getInt("id");
-                    String wktLiteral = result.getString("wkt");
-                    Double currentHeight = result.getDouble("height");
-                    Geometry scopePolygon = WKTReader.extract(wktLiteral).getGeometry();
-                    Point centre = scopePolygon.getCentroid();
-                    Double currentDistance = reference.distance(centre);
-                    if (currentDistance < dist) {
-                        dist = currentDistance;
-                        finalId = id;
-                        buildingFootprint = scopePolygon;
-                        height = currentHeight;
-                    }
-                }
-
-                if (dist <= maxDistance) {
-                    numberBuildingsIdentified++;
-                    fac.buildingFootprint = buildingFootprint;
-                    fac.buildingId = finalId;
-                    fac.buildingHeight = height;
-                } else {
-                    LOGGER.warn("No building found for factory with IRI {} within the specified maximum distance.",
-                            fac.factoryIri);
-                }
-            }
-
-        } catch (SQLException e) {
-            LOGGER.error(e.getMessage());
-        }
-
-    }
-
-    /**
-     * Identifies the building whose envelope centroid is closest to the coordinate
-     * of each factory.
-     * 
-     * @param factories ArrayList of factories. Each object must have its
-     *                  coordinates specified.
      * 
      * 
      * @return None
@@ -409,13 +281,11 @@ public class BuildingIdentificationAgent extends JPSAgent {
             feature.put("geometry", geometry);
             JSONObject properties = new JSONObject();
             properties.put("iri", fac.factoryIri);
-            properties.put("color", "#666666");
-            properties.put("opacity", 0.66);
-            properties.put("base", 0);
             properties.put("height", fac.buildingHeight);
             properties.put("heat", fac.heatEmission);
             properties.put("factoryType", fac.factoryClass);
             properties.put("name", fac.companyName);
+            properties.put("id", fac.buildingId);
             feature.put("properties", properties);
             features.put(feature);
 
@@ -456,62 +326,6 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
     }
 
-    private void createBuildingsLayer() {
-        GeoServerClient geoServerClient = GeoServerClient.getInstance();
-        GeoServerVectorSettings geoServerVectorSettings = new GeoServerVectorSettings();
-
-        UpdatedGSVirtualTableEncoder virtualTable = new UpdatedGSVirtualTableEncoder();
-        virtualTable.setSql(String.format(
-                "select measured_height as height, envelope from building, cityobject where building.id = cityobject.id and objectclass_id = 26"));
-        virtualTable.setEscapeSql(true);
-        virtualTable.setName("sg_buildings_lod1");
-        virtualTable.addVirtualTableGeometry("wkb_geometry", "Polygon", String.valueOf(dbSrid));
-        geoServerVectorSettings.setVirtualTable(virtualTable);
-
-        String db = "postgres";
-        String tableName = "sg_buildings_lod1";
-        String geoserverWorkspace = "geoserver";
-
-        geoServerClient.createPostGISLayer(geoserverWorkspace, db,
-                tableName, geoServerVectorSettings);
-    }
-
-    /**
-     * Deletes all triples specifying the GmlId of a particular factory.
-     * 
-     * @param iri   IRI to delete
-     * @param route access agent route
-     */
-    private void deleteBuildingsTriples(String route) {
-        UpdateBuilder db = new UpdateBuilder()
-                .addWhere("?s", contains, "?o").addWhere("?o", rdfType, buildingType);
-
-        db.addDeleteQuads(db.buildDeleteWhere().getQuads());
-        AccessAgentCaller.updateStore(route, db.buildRequest().toString());
-    }
-
-    /**
-     * Sets store client to the query and update endpoint of route
-     * 
-     * @param route access agent route
-     */
-    private void setStoreClient(String queryEndpoint) {
-        if (isDockerized())
-            storeClient = new RemoteStoreClient(endpointConfig.getKgurl(), endpointConfig.getKgurl());
-        else
-            storeClient = new RemoteStoreClient(queryEndpoint, queryEndpoint);
-    }
-
-    /**
-     * Check if the agent is running in Docker
-     * 
-     * @return true if running in Docker, false otherwise
-     */
-    private boolean isDockerized() {
-        File f = new File("/.dockerenv");
-        return f.exists();
-    }
-
     /**
      * Checks if a string is able to be parsable as a number
      * 
@@ -525,140 +339,6 @@ public class BuildingIdentificationAgent extends JPSAgent {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    /**
-     * @deprecated
-     * @param cityObjectIdList: List of cityObject Ids which are integers.
-     * @return HashMap with cityobject IDs as keys and a list of polygons
-     *         (represented as Coordinate[]) as values.
-     */
-    @Deprecated
-    private Map<Integer, List<Coordinate[]>> getSurfaceGeometry(List<Integer> cityObjectIdList) {
-
-        String sql = "select id, cityobject_id, public.ST_AsText(geometry) as wkt from surface_geometry "
-                + System.lineSeparator() +
-                "where geometry is not NULL and cityobject_id in ";
-
-        String cityObjectListString = cityObjectIdList.stream().map(x -> String.valueOf(x))
-                .collect(Collectors.joining(",", "(", ")"));
-
-        String query = sql + cityObjectListString;
-        Map<Integer, List<Coordinate[]>> objectGeometry = new HashMap<>();
-
-        try (Connection conn = rdbStoreClient.getConnection();
-                Statement stmt = conn.createStatement();) {
-
-            ResultSet result = stmt.executeQuery(query);
-
-            while (result.next()) {
-                Integer cityObjId = result.getInt("cityobject_id");
-                String wktLiteral = result.getString("wkt");
-                Geometry buildingPolygon = WKTReader.extract(wktLiteral).getGeometry();
-                Coordinate[] polyCoords = buildingPolygon.getCoordinates();
-
-                if (objectGeometry.containsKey(cityObjId)) {
-                    objectGeometry.get(cityObjId).add(polyCoords);
-                } else {
-                    List<Coordinate[]> buildingSurfaces = new ArrayList<>();
-                    buildingSurfaces.add(polyCoords);
-                    objectGeometry.put(cityObjId, buildingSurfaces);
-                }
-            }
-
-        } catch (SQLException e) {
-            LOGGER.error(e.getMessage());
-        }
-
-        return objectGeometry;
-
-    }
-
-    private void writeCesiumInput(Map<String, Integer> factoryToBuilding,
-            Map<Integer, List<Coordinate[]>> objectGeometry) {
-
-        JSONObject result = new JSONObject();
-        result.put("type", "FeatureCollection");
-        result.put("name", "data");
-
-        JSONObject crsProperties = new JSONObject();
-        crsProperties.put("properties", new JSONObject().put("name", sridName));
-        crsProperties.put("type", "name");
-        result.put("crs", crsProperties);
-
-        JSONArray featureArray = new JSONArray();
-
-        for (String factoryIri : factoryToBuilding.keySet()) {
-            int cityObjId = factoryToBuilding.get(factoryIri);
-            List<Coordinate[]> polygons = objectGeometry.get(cityObjId);
-            String factoryName = "random";
-
-            JSONObject featureObject = new JSONObject();
-            featureObject.put("type", "feature");
-            JSONObject propertiesObject = new JSONObject();
-            propertiesObject.put("name", factoryName);
-            propertiesObject.put("description", "Building of " + factoryName);
-            // hard-coded for now
-            propertiesObject.put("color", "rgb(2,243,6)");
-            featureObject.put("properties", propertiesObject);
-            // Geometry
-            JSONObject geometryObject = new JSONObject();
-            geometryObject.put("type", "MultiPolygon");
-
-            JSONArray geomArray = new JSONArray();
-            polygons.stream().forEach(polygon -> {
-                // Array of arrays
-                JSONArray polyArray = new JSONArray();
-                Arrays.stream(polygon)
-                        .forEach(coord -> polyArray.put(new JSONArray(new double[] { coord.x, coord.y, coord.z })));
-                geomArray.put(polyArray);
-            });
-            geometryObject.put("coordinates", new JSONArray().put(geomArray));
-            featureObject.put("geometry", geometryObject);
-            featureArray.put(featureObject);
-        }
-
-        result.put("features", featureArray);
-
-        // Output heat emission data in GeoJSON format for DUCT
-
-        String outputFP = Paths.get(System.getProperty("user.dir"), "output", "data.geojson").toString();
-        String resultString = result.toString();
-        File file1 = new File(outputFP);
-        FileWriter fw;
-        try {
-            fw = new FileWriter(file1);
-            PrintWriter pw = new PrintWriter(fw);
-            pw.println(resultString);
-            pw.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    /**
-     * Creates triples that specify the cityObjectId associated with the building
-     * matched to each
-     * factory.
-     * 
-     * @param iri
-     * @param route
-     */
-
-    private void instantiateBuildingsTriples(Set<String> factoryIriList) {
-        UpdateBuilder ub = new UpdateBuilder();
-
-        for (String key : factoryIriList) {
-            String identifier = UUID.randomUUID().toString();
-            String buildingIri = building + identifier;
-            ub.addInsert(key, contains, buildingIri);
-            ub.addInsert(buildingIri, rdfType, buildingType);
-        }
-
-        // AccessAgentCaller.updateStore(route, ub.toString());
-        storeClient.executeUpdate(ub.toString());
-
     }
 
 }

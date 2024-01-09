@@ -6,18 +6,17 @@ import com.cmclinnovations.stack.clients.postgis.PostGISEndpointConfig;
 
 public class EndpointConfig {
     private PostGISEndpointConfig postGISEndpointConfig;
+    private BlazegraphEndpointConfig blazegraphEndpointConfig;
     private String dbUser;
     private String dbPassword;
 
-    private String kgurl;
     private String kguser;
     private String kgpassword;
 
-    public EndpointConfig(String namespace) {
+    public EndpointConfig() {
         ContainerClient containerClient = new ContainerClient();
-        BlazegraphEndpointConfig blazegraphEndpointConfig = containerClient.readEndpointConfig("blazegraph",
+        blazegraphEndpointConfig = containerClient.readEndpointConfig("blazegraph",
                 BlazegraphEndpointConfig.class);
-        this.kgurl = blazegraphEndpointConfig.getUrl(namespace);
         this.kguser = blazegraphEndpointConfig.getUsername();
         this.kgpassword = blazegraphEndpointConfig.getPassword();
         postGISEndpointConfig = containerClient.readEndpointConfig("postgis", PostGISEndpointConfig.class);
@@ -25,8 +24,8 @@ public class EndpointConfig {
         this.dbPassword = postGISEndpointConfig.getPassword();
     }
 
-    public String getKgurl() {
-        return this.kgurl;
+    public String getKgurl(String namespace) {
+        return blazegraphEndpointConfig.getUrl(namespace);
     }
 
     public String getKguser() {

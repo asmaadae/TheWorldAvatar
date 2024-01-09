@@ -267,8 +267,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
      * 
      * @return None
      */
-
-    private void linkBuildings() {
+    @Deprecated
+    private void linkBuildingsOld() {
 
         try (Connection conn = rdbStoreClient.getConnection();
                 Statement stmt = conn.createStatement();) {
@@ -314,6 +314,59 @@ public class BuildingIdentificationAgent extends JPSAgent {
                     LOGGER.warn("No building found for factory with IRI {} within the specified maximum distance.",
                             fac.factoryIri);
                 }
+            }
+
+        } catch (SQLException e) {
+            LOGGER.error(e.getMessage());
+        }
+
+    }
+
+    /**
+     * Identifies the building whose envelope centroid is closest to the coordinate
+     * of each factory.
+     * 
+     * @param factories ArrayList of factories. Each object must have its
+     *                  coordinates specified.
+     * 
+     * 
+     * @return None
+     */
+
+    private void linkBuildings() {
+
+        try (Connection conn = rdbStoreClient.getConnection();
+                Statement stmt = conn.createStatement();) {
+
+            for (Factory fac : factories) {
+                String sqlString = String.format("select id, wkt, height, dist from ( " + System.lineSeparator() +
+                        "select cityobject.id as id, measured_height as height, public.ST_AsText(envelope) as wkt, "
+                        +
+                        System.lineSeparator() +
+                        "public.ST_DISTANCE(public.ST_Point(%f,%f, %d), envelope) AS dist from cityobject, building" +
+                        System.lineSeparator() +
+                        "WHERE cityobject.objectclass_id = 26 AND cityobject.id = building.id" +
+                        System.lineSeparator() +
+                        ") AS sub" + System.lineSeparator() +
+                        "order by dist" + System.lineSeparator() +
+                        "limit 1",
+                        fac.location.getX(), fac.location.getY(), dbSrid);
+
+                ResultSet result = stmt.executeQuery(sqlString);
+
+                while (result.next()) {
+                    fac.buildingId = result.getInt("id");
+                    String wktLiteral = result.getString("wkt");
+                    fac.buildingFootprint = WKTReader.extract(wktLiteral).getGeometry();
+                    fac.buildingHeight = result.getDouble("height");
+                    Double dist = result.getDouble("dist");
+
+                    if (dist > maxDistance)
+                        LOGGER.warn("Nearest footprint for factory with IRI {} is {} meters away",
+                                fac.factoryIri, dist);
+                    numberBuildingsIdentified++;
+                }
+
             }
 
         } catch (SQLException e) {

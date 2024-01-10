@@ -61,7 +61,9 @@ The agent supports POST requests and is reachable at http://localhost:3838/build
 
 The following is an example POST request :
 
-```curl -X POST -H "Content-Type: application/json" -d '{"maxDistance":"100.0","dbName":"test","namespace":"sgbusinessunits"}'  "localhost:3838/buildingidentificationagent/run"```
+```
+curl -X POST -H "Content-Type: application/json" -d '{"maxDistance":"100.0","dbName":"test","namespace":"sgbusinessunits"}'  "localhost:3838/buildingidentificationagent/run"
+```
 
 
 

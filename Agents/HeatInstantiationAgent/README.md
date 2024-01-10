@@ -1,34 +1,40 @@
-## Python Service
-This container holds all the python functions that can be called from other containers via a REST interface.
+# Heat Instantiation Agent
+This agent instantiates data required to calculate heat emissions of various types of factories as triples in a blazegraph namespace according to the OntoCompany ontology (https://github.com/cambridge-cares/TheWorldAvatar/tree/main/JPS_Ontology/ontology/ontocompany). 
 
-# Get emissions from speed load map
-Send GET request to http://localhost:3838/python-service/getEmissions with the following parameters
-- speed
-  - Value of speed in rpm
-- torque
-  - Value of torque in Nm
+The data needs to be in an Excel file called 'heat.xlsx' in the 'data' directory within this folder. This file needs to contain one sheet for each type of factory.
 
-This returns a JSON object with three key parts
-1) JSON object with the key "mixture" with the following JSON objects containing values
-    - "molmass"
-    - "cp"
-    - "temperature"
-    - "density"
-2) JSON array with the key "particle", each element in the array is a JSON object with the following keys
-    - "density"
-    - "emission_rate"
-    - "diameter"
-3) JSON array with the key "pollutants", each element in the array is a JSON object with the following keys
-    - "name"
-    - "value"
+# Running the agent
 
-This route is called by the EmissionsAgent.
+1. Execute the 'docker-compose build' command in this folder at the same absolute path as this README.md.
 
-# Postprocess AERMOD results into GeoJSON
-Send GET request to http://localhost:3838/python-service/getAermodGeoJSON with the parameters
-- dispersionMatrix
-    - URL to download AERMOD output file (stored in FileServer)
-- srid
-    - srid for the output results, so that it can be converted to EPSG:4326 for visualisation
+2. Place the 'stack-manager-input-config/heat-instantiation.json' file in the 'Deploy/stacks/dynamic/stack-manager/inputs/config/services' folder.
 
-Returns a GeoJSON for a filled contour for visualisation. Called by AermodAgent before being uploaded to PostGIS as a vector.
+3. Spin up the stack following the instructions at https://github.com/cambridge-cares/TheWorldAvatar/tree/main/Deploy/stacks/dynamic/stack-manager. 
+
+4. Create a namespace in the stack blazegraph. 
+
+5. Assuming the namespace created in step 4 is called 'sgbusinessunits', send a POST reuest to the agent as follows:
+
+```
+curl -X GET "localhost:3838/heat-instantiation/getHeatData?namespace=sgbusinessunits"
+```
+
+Upon successful completion, the agent returns a JSONObject {'success': True} together with the HTTP status 200.
+
+# Properties instantiated for various types of factories
+
+## Generic properties
+
+- Company Name
+- Address of factory
+- Latitude of the address in EPSG:4326 CRS
+- Longitude of the address in EPSG:4326 CRS
+- Year of Formation
+- Business Activity 
+- SSIC code
+
+## Chemical Plants
+
+- Specific energy consumption
+- Production volume
+- Thermal efficiency

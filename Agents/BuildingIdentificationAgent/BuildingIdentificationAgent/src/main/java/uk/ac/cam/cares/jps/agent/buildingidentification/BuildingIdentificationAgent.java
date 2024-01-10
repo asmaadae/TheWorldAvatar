@@ -49,7 +49,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
     public static final String KEY_DISTANCE = "maxDistance";
     private static final String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
     private static final String rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-    private static final String rdfType = rdf + "type";
+
     private static final String ontoCompanyPrefix = "http://www.theworldavatar.com/kg/ontocompany/";
     private static final String contactPrefix = "http://ontology.eil.utoronto.ca/icontact.owl#";
     private static final String ontoMeasurePrefix = "http://www.ontology-of-units-of-measure.org/resource/om-2/";
@@ -63,17 +63,13 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private static final Logger LOGGER = LogManager.getLogger(BuildingIdentificationAgent.class);
 
     // Properties of database containing buildings data.
-    // TODO: The database parameters should be sent in the POST request to this
-    // agent.
     private String dbUrl = null;
     private String dbUser = null;
     private String dbPassword = null;
+    private String dbName = null;
     private int dbSrid;
     private double maxDistance;
     private int numberBuildingsIdentified = 0, numberFactoriesQueried = 0;
-    private static final String contains = "http://www.opengis.net/ont/geosparql#ehContains";
-    private static final String building = "http://www.theworldavatar.com/kg/ontocompany/Building_";
-    private static final String buildingType = "http://www.purl.org/oema/infrastructure/Building";
 
     @Override
     public JSONObject processRequestParameters(JSONObject requestParams) {
@@ -91,12 +87,14 @@ public class BuildingIdentificationAgent extends JPSAgent {
             }
 
             storeClient = new RemoteStoreClient(endpoint);
+
             if (requestParams.has("dbUrl")) {
                 dbUrl = requestParams.getString("dbUrl");
                 dbUser = requestParams.getString("dbUser");
                 dbPassword = requestParams.getString("dbPassword");
             } else {
-                dbUrl = endpointConfig.getDbUrl("postgres");
+                dbName = requestParams.getString("dbName");
+                dbUrl = endpointConfig.getDbUrl(dbName);
                 dbUser = endpointConfig.getDbUser();
                 dbPassword = endpointConfig.getDbPassword();
             }
@@ -104,6 +102,12 @@ public class BuildingIdentificationAgent extends JPSAgent {
             rdbStoreClient = new RemoteRDBStoreClient(dbUrl, dbUser, dbPassword);
             getDbSrid();
             maxDistance = Double.parseDouble(requestParams.getString(KEY_DISTANCE));
+            // Reset all variables
+            factories.clear();
+            factoryTypes.clear();
+            numberBuildingsIdentified = 0;
+            numberFactoriesQueried = 0;
+
             getFactoryProperties();
             linkBuildings();
             createFactoriesTable();
@@ -134,7 +138,7 @@ public class BuildingIdentificationAgent extends JPSAgent {
     private void getDbSrid() {
         try (Connection conn = rdbStoreClient.getConnection();
                 Statement stmt = conn.createStatement();) {
-            String sqlString = "SELECT srid,gml_srs_name from database_srs";
+            String sqlString = "SELECT srid,gml_srs_name from citydb.database_srs";
             ResultSet result = stmt.executeQuery(sqlString);
             if (result.next()) {
                 dbSrid = result.getInt("srid");
@@ -215,7 +219,8 @@ public class BuildingIdentificationAgent extends JPSAgent {
                         "select cityobject.id as id, measured_height as height, public.ST_AsText(envelope) as wkt, "
                         +
                         System.lineSeparator() +
-                        "public.ST_DISTANCE(public.ST_Point(%f,%f, %d), envelope) AS dist from cityobject, building" +
+                        "public.ST_DISTANCE(public.ST_Point(%f,%f, %d), envelope) AS dist from citydb.cityobject, citydb.building"
+                        +
                         System.lineSeparator() +
                         "WHERE cityobject.objectclass_id = 26 AND cityobject.id = building.id" +
                         System.lineSeparator() +
@@ -267,8 +272,6 @@ public class BuildingIdentificationAgent extends JPSAgent {
             JSONArray geomArray = new JSONArray();
             Arrays.stream(footPrint.getCoordinates()).forEach(coord -> {
                 double[] xyOriginal = { coord.x, coord.y };
-                // double[] xyTransformed = CRSTransformer.transform("EPSG:" + dbSrid,
-                // "EPSG:4326", xyOriginal);
                 geomArray.put(new JSONArray(xyOriginal));
             });
 
@@ -283,9 +286,9 @@ public class BuildingIdentificationAgent extends JPSAgent {
             properties.put("iri", fac.factoryIri);
             properties.put("height", fac.buildingHeight);
             properties.put("heat", fac.heatEmission);
-            properties.put("factoryType", fac.factoryClass);
+            properties.put("factory_type", fac.factoryClass);
             properties.put("name", fac.companyName);
-            properties.put("id", fac.buildingId);
+            properties.put("building_id", fac.buildingId);
             feature.put("properties", properties);
             features.put(feature);
 
@@ -294,8 +297,9 @@ public class BuildingIdentificationAgent extends JPSAgent {
         featureCollection.put("features", features);
 
         GDALClient gdalClient = GDALClient.getInstance();
-        gdalClient.uploadVectorStringToPostGIS("postgres", "factories",
+        gdalClient.uploadVectorStringToPostGIS(dbName, "citydb.factories",
                 featureCollection.toString(), new Ogr2OgrOptions(), false);
+        LOGGER.info("Created factories table with {} records.", numberBuildingsIdentified);
 
     }
 
@@ -307,20 +311,21 @@ public class BuildingIdentificationAgent extends JPSAgent {
 
         String geoserverWorkspace = "heat";
         GeoServerClient geoServerClient = GeoServerClient.getInstance();
+        geoServerClient.deleteWorkspace(geoserverWorkspace);
         geoServerClient.createWorkspace(geoserverWorkspace);
 
         for (String facType : factoryTypes) {
             GeoServerVectorSettings geoServerVectorSettings = new GeoServerVectorSettings();
             UpdatedGSVirtualTableEncoder virtualTable = new UpdatedGSVirtualTableEncoder();
             virtualTable.setSql(String.format(
-                    "select * from factories where factoryType = \'%s\'", facType));
+                    "select * from citydb.factories where factory_type = \'%s\'", facType));
             virtualTable.setEscapeSql(true);
             String[] facSplit = facType.split("/");
             String tableName = facSplit[facSplit.length - 1];
             virtualTable.setName(tableName);
             virtualTable.addVirtualTableGeometry("wkb_geometry", "Polygon", String.valueOf(dbSrid));
             geoServerVectorSettings.setVirtualTable(virtualTable);
-            geoServerClient.createPostGISLayer(geoserverWorkspace, "postgres", tableName, geoServerVectorSettings);
+            geoServerClient.createPostGISLayer(geoserverWorkspace, dbName, tableName, geoServerVectorSettings);
 
         }
 

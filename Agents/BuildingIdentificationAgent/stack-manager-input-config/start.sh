@@ -78,7 +78,6 @@ then
 
     # Inject TWA-VF tag into visualisation configs
     sed -i "s|TAG|$TAG|g" "$MANAGER_CONFIG/services/mapbox-vis.json"
-    sed -i "s|TAG|$TAG|g" "$MANAGER_CONFIG/services/cesium-vis.json"
 
     # Copy the visualisation files into the special volume populator folder
     echo "Clearing existing manager volumes and copying in new ones..."

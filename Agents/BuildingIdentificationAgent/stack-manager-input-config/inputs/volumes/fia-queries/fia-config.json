@@ -6,6 +6,13 @@
             "meta": {
                 "queryFile": "ChemicalPlant.sparql"
             }
+        },
+        {
+            "id": "Feature",
+            "class": "http://www.purl.org/oema/infrastructure/Building",
+            "meta": {
+                "queryFile": "BuildingsJI.sparql"
+            }
         }
     ]
 }

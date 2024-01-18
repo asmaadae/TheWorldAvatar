@@ -1,0 +1,69 @@
+prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#>
+prefix rdf: 	<http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+prefix ocp:     <http://www.theworldavatar.com/kg/ontochemplant/>
+prefix ocy:     <http://www.theworldavatar.com/kg/ontocompany/>
+prefix om:      <http://www.ontology-of-units-of-measure.org/resource/om-2/>
+prefix ope:     <http://www.theworldavatar.com/kg/ontocape/upperlevel/system/>
+prefix geo:     <http://www.opengis.net/ont/geosparql#>
+
+SELECT ?Property ?Value ?Unit Where {
+    {
+        BIND ("Heat Emissions Rate" AS ?Property)
+        BIND("Megawatts" AS ?Unit)
+        [IRI] ocy:hasGeneratedHeat/om:hasValue/om:hasNumericalValue ?Value.
+    } UNION {
+        BIND("Production Volume" AS ?Property)
+        BIND("Tons per Year" AS ?Unit)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?plant ocp:hasDesignCapacity ?dc.
+        ?dc om:hasNumericalValue ?Value.
+    } UNION {
+        BIND("Specific Energy Consumption" AS ?Property)
+        BIND("MegaJoules per Kilogram" AS ?Unit)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?plant ocp:hasSpecificEnergyConsumption ?se.
+        ?se om:hasNumericalValue ?Value.
+    } UNION {
+        BIND("Company Name" AS ?Property)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy rdfs:label ?Property.
+    } UNION {
+        BIND("Sectoral Description" AS ?Property)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy ocy:hasSectoralDescription ?Value.
+    } UNION {
+        BIND("SSIC Code" AS ?Property)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy ocy:hasSSICCode ?ssc.
+        BIND(xsd:integer(?ssc) as ?Value).
+    } UNION {
+        BIND("Year of Establishment" AS ?Property)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy ocp:hasyearofFormation ?yf.
+        BIND(xsd:integer(?yf) as ?Value).
+    } UNION {
+        BIND("Revenue" AS ?Property)
+        BIND("millions of US dollars per year" AS ?Unit)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy ocy:hasRevenue ?Value.
+    } UNION {
+        BIND("Number of Employees" AS ?Property)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy ocy:hasNumberofEmployees ?emp.
+      	BIND(xsd:integer(?emp) as ?Value).
+    } UNION {
+        BIND("Production Technology" AS ?Property)
+        ?cy ope:isownerof ?plant.
+        ?plant geo:ehContains [IRI].
+        ?cy ocy:hasProductionTechnology ?Value.
+    }
+ 
+} 

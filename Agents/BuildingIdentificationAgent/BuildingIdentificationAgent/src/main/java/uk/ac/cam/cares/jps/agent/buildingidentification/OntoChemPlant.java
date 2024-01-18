@@ -42,7 +42,7 @@ public class OntoChemPlant {
     private static final String ontoChemPlantPrefix = "http://www.theworldavatar.com/kg/ontochemplant/";
     private static final String contactPrefix = "http://ontology.eil.utoronto.ca/icontact.owl#";
     private static final String ontoMeasurePrefix = "http://www.ontology-of-units-of-measure.org/resource/om-2/";
-    private static final String buildingType = "<http://www.purl.org/oema/infrastructure/Building>";
+    private static final String buildingType = "http://www.purl.org/oema/infrastructure/Building";
 
     private RemoteRDBStoreClient rdbStoreClient;
     private RemoteStoreClient storeClient;
@@ -135,7 +135,7 @@ public class OntoChemPlant {
                 .addPrefix("geo", geoSparql);
 
         String addressVar = "?address";
-        wb.addWhere("?building", "rdf:type", buildingType)
+        wb.addWhere("?building", "rdf:type", NodeFactory.createURI(buildingType))
                 .addWhere("?building", "con:hasAddress", addressVar)
                 .addWhere("?company",
                         NodeFactory.createURI("http://www.theworldavatar.com/kg/ontocape/upperlevel/system/isownerof"),
@@ -262,6 +262,8 @@ public class OntoChemPlant {
             feature.put("type", "Feature");
             JSONObject properties = new JSONObject();
             properties.put("iri", bld.iri);
+            properties.put("heat", bld.heatEmission);
+            properties.put("name", bld.name);
             properties.put("building_id", bld.buildingId);
             feature.put("properties", properties);
             features.put(feature);
@@ -285,18 +287,19 @@ public class OntoChemPlant {
 
         String geoserverWorkspace = "heat";
         GeoServerClient geoServerClient = GeoServerClient.getInstance();
-        geoServerClient.deleteWorkspace(geoserverWorkspace);
         geoServerClient.createWorkspace(geoserverWorkspace);
 
         GeoServerVectorSettings geoServerVectorSettings = new GeoServerVectorSettings();
         UpdatedGSVirtualTableEncoder virtualTable = new UpdatedGSVirtualTableEncoder();
-        String sqlString = "select building_id, envelope, measured_height, iri from citydb.cityobject, citydb.building, citydb.chemical_plants_buildings where  "
+        String sqlString = "select building_id, heat, citydb.chemical_plants_buildings.name, envelope, measured_height as height, iri "
                 +
-                " citydb.building.id = citydb.building.id AND building_id = citydb.building.id";
+                "from citydb.cityobject, citydb.building, citydb.chemical_plants_buildings where  "
+                +
+                " citydb.building.id = citydb.cityobject.id AND building_id = citydb.building.id";
 
         virtualTable.setSql(sqlString);
         virtualTable.setEscapeSql(true);
-        String tableName = "ChemicalPlantsJI";
+        String tableName = "BuildingsJI";
         virtualTable.setName(tableName);
         virtualTable.addVirtualTableGeometry("wkb_geometry", "Polygon", String.valueOf(dbSrid));
         geoServerVectorSettings.setVirtualTable(virtualTable);

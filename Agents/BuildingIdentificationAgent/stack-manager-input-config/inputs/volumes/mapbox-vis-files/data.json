@@ -1,9 +1,9 @@
 {
-    "name": "All Data",
+    "name": "Singapore Industries",
     "stack": "http://localhost:3838",
     "groups": [
         {
-            "name": "Singapore industrial buildings",
+            "name": "Mainland",
             "stack": "http://localhost:3838",
             "sources": [
                 {
@@ -17,7 +17,7 @@
             "layers": [
                 {
                     "id": "ChemicalPlant-layer",
-                    "name": "Singapore chemical plants",
+                    "name": "Chemical Plants",
                     "source": "ChemicalPlant-source",
                     "source-layer": "ChemicalPlant",
                     "type": "fill-extrusion",
@@ -37,7 +37,56 @@
                             ],
                             0,
                             "rgb(0, 0, 255)",
-                            40,
+                            1620,
+                            "rgb(255, 0, 0)"
+                        ],
+                        "fill-extrusion-opacity": 0.85,
+                        "fill-extrusion-base": 0,
+                        "fill-extrusion-height": [
+                            "get",
+                            "height"
+                        ],
+                        "fill-extrusion-vertical-gradient": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Jurong Island",
+            "stack": "http://localhost:3838",
+            "sources": [
+                {
+                    "id": "BuildingsJI-source",
+                    "type": "vector",
+                    "tiles": [
+                        "http://localhost:3838/geoserver/heat/wms?service=WMS&version=1.1.0&request=GetMap&layers=heat%3ABuildingsJI&bbox={bbox-epsg-3857}&width=256&height=256&srs=EPSG%3A3857&format=application/vnd.mapbox-vector-tile"
+                    ]
+                }
+            ],
+            "layers": [
+                {
+                    "id": "BuildingsJI-layer",
+                    "name": "Buildings",
+                    "source": "BuildingsJI-source",
+                    "source-layer": "BuildingsJI",
+                    "type": "fill-extrusion",
+                    "order": 1,
+                    "layout": {
+                        "visibility": "visible"
+                    },
+                    "paint": {
+                        "fill-extrusion-color": [
+                            "interpolate",
+                            [
+                                "linear"
+                            ],
+                            [
+                                "get",
+                                "heat"
+                            ],
+                            0,
+                            "rgb(0, 0, 255)",
+                            1620,
                             "rgb(255, 0, 0)"
                         ],
                         "fill-extrusion-opacity": 0.85,

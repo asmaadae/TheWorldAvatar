@@ -1,0 +1,13 @@
+{
+    "services": {
+        "includes": [
+            "visualisation",
+            "isochroneagent"
+        ],
+        "excludes": [
+            ]
+    },
+    "volumes": {
+        "vis-files": "webspace"
+    }
+}

@@ -28,6 +28,8 @@ On this same directory run, replace `STACK-NAME` with your stack-manager name.
 ```
 
 ### Spinning up stack-manager
+Add in credentials `mapbox_username` and `mapbox_api_key` following instructions [here](https://github.com/cambridge-cares/TheWorldAvatar/tree/main/Deploy/stacks/dynamic/stack-manager#example---including-a-visualisation)
+
 Copy all relevant [config](stack-manager-inputs/config/) and [data](stack-manager-inputs/data) files into the stack's [input](https://github.com/cambridge-cares/TheWorldAvatar/tree/main/Deploy/stacks/dynamic/stack-manager/inputs) folder. Spin up the stack-manager.
 
 ### Uploading the data

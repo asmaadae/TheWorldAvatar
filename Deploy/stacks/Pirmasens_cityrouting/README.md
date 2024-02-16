@@ -19,14 +19,25 @@ To prepare OSM data in `.gml` format
 3) Import the `.osm` file  into QGIS using [QuickOSM](https://plugins.qgis.org/plugins/QuickOSM/) plugin, then export points and polygons layer as `points.gml` and `polygons.gml`.
 4) Place the file in [points directory](stack-data-uploader-inputs/data/pirmasens_toilets/point/) and [polygons directory](stack-data-uploader-inputs/data/pirmasens_toilets/polygon/).
 
-## Creating Isochrone from Toilet with IsochroneAgent
-1) Run IsochroneAgent with the inputs as specified in [IsochroneAgent/Inputs](IsochroneAgent/inputs/).
-2) Change the Ontop endpoint with your <STACK-NAME> in the service clause.
-3) Execute 
-3) The isochrone generated are in the intervals of 1 minutes. 
 
 ## Starting the visualisation
+### Replacing the agent configuration file
+On this same directory run, replace `STACK-NAME` with your stack-manager name.
+```
+./copy.sh start <STACK-NAME>
+```
+
+### Spinning up stack-manager
 Copy all relevant [config](stack-manager-inputs/config/) and [data](stack-manager-inputs/data) files into the stack's [input](https://github.com/cambridge-cares/TheWorldAvatar/tree/main/Deploy/stacks/dynamic/stack-manager/inputs) folder. Spin up the stack-manager.
+
+### Uploading the data
+Upload data following [stack-data-uploader-inputs](stack-data-uploader-inputs) using [stack-data-uploader](https://github.com/cambridge-cares/TheWorldAvatar/tree/main/Deploy/stacks/dynamic/stack-data-uploader). Relevant files need to be placed in each of the folders.
+
+### Running the agent
+To begin running the agent, on this same directory, run the command below while replacing `STACK-NAME` with your stack-manager name.
+```
+./stack.sh start <STACK-NAME>
+```
 
 ## Accessing the visualisation
 Visualization can be seen at [http://localhost:3838/visualisation](http://localhost:3838/visualisation)

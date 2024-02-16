@@ -32,4 +32,4 @@ STACK_NAME="$2"
 toilet_destination_file="../../../Agents/IsochroneAgent/inputs/Toilet/POIqueries/toilet.sparql"
 
 # Replace "ONTOP" with "http://${STACK_NAME}-ontop:8080/sparql/" in the destination file
-sed -i "s|ONTOP|http://${STACK_NAME}-ontop:8080/sparql/|g" "$toilet_destination_file"
+sed -i "s|\[ONTOP\]|<http://${STACK_NAME}-ontop:8080/sparql/>|g" "$toilet_destination_file"
